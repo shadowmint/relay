@@ -5,10 +5,10 @@ use crate::model::external_error::ExternalError;
 #[derive(Debug)]
 pub enum ClientInternalEvent {
     /// The response from the master when a request is made join
-    ClientJoinResponse { success: bool, error: Option<ExternalError> },
+    ClientJoinResponse { transaction_id: String, success: bool, error: Option<ExternalError> },
 
     /// Send a message to the master
-    MessageFromMaster { transaction_id: String, format: String, data: String },
+    MessageFromMaster { data: String },
 
     /// Something went wrong with a request
     MessageFromClientResponse { transaction_id: String, success: bool, error: Option<ExternalError> },
@@ -18,36 +18,35 @@ pub enum ClientInternalEvent {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "object_type")]
 pub enum ClientExternalEvent {
     /// Sent by the client application to initialize a new session
-    InitializeClient(ClientMetadata),
+    InitializeClient { transaction_id: String, metadata: ClientMetadata },
 
-    /// Sent by the application to notify about initialization state (ready, error, etc)
-    InitializeClientResponse { success: bool, error: Option<ExternalError> },
-
-    /// Join a game by id
-    Join { game_name: String },
-
-    /// Sent by the application to notify about a join result
-    JoinResponse { success: bool, error: Option<ExternalError> },
+    /// Join a session by id
+    Join { transaction_id: String, session_id: String },
 
     /// Send a message to the master, this is a fire and forget action
-    MessageFromClient { transaction_id: String, format: String, data: String },
+    MessageFromClient { transaction_id: String, data: String },
+
+    /// Sent by the application to notify about transaction result
+    TransactionResult { transaction_id: String, success: bool, error: Option<ExternalError> },
 
     /// Recv a message from the master
-    MessageToClient { transaction_id: String, format: String, data: String },
-
-    /// The external client disconnected
-    ClientDisconnected { reason: String },
+    MessageToClient { data: String },
 
     /// The internal master disconnected or booted this client
-    MasterDisconnected { reason: String }
+    /// This is a notification event, not an action by the client.
+    MasterDisconnected { reason: String },
 }
 
 #[derive(Debug)]
 pub enum ClientControlEvent {
     /// Unconditionally halt immediately
-    Halt
+    Halt,
+
+    /// Sent by the websocket handler to notify that the client disconnected
+    ClientDisconnected { reason: String },
 }
 
 #[derive(Debug)]

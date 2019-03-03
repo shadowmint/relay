@@ -13,6 +13,7 @@ use crate::isolates::master::MasterEventDispatch::DispatchToClient;
 use crate::events::client_event::ClientInternalEvent::ClientJoinResponse;
 use crate::events::client_event::ClientInternalEvent;
 use crate::infrastructure::relay_logger::RelayLogger;
+use crate::isolates::client::ClientEventDispatch::DispatchInternal;
 
 pub struct MasterState {
     name: String,
@@ -54,70 +55,102 @@ impl MasterState {
         self.clients.get(identity)
     }
 
-    pub fn external_initialize(&mut self, metadata: MasterMetadata) -> MasterEventDispatch {
+    /// Return a client that isn't attached to this master
+    /// For example, for clients which are being rejected
+    pub fn get_external_client(&self, identity: &IsolateIdentity) -> Option<IsolateChannel<ClientEvent>> {
+        match self.manager.find_client(&identity) {
+            Ok(client_ref) => {
+                Some(client_ref)
+            }
+            Err(_) => None
+        }
+    }
+
+    pub fn external_initialize(&mut self, transaction_id: String, metadata: MasterMetadata) -> MasterEventDispatch {
         match self.manager.register_session(&self.identity, &metadata.master_id) {
             Ok(_) => {
                 self.name = metadata.master_id.clone();
+                self.metadata = Some(metadata);
                 self.active = true;
-                DispatchExternal(MasterExternalEvent::InitializeMasterResponse { success: true, error: None })
+                DispatchExternal(MasterExternalEvent::TransactionResult { transaction_id, success: true, error: None })
             }
             Err(e) => {
-                DispatchExternal(MasterExternalEvent::InitializeMasterResponse { success: false, error: Some(ExternalError::from(e)) })
+                DispatchExternal(MasterExternalEvent::TransactionResult { transaction_id, success: false, error: Some(ExternalError::from(e)) })
             }
         }
     }
 
-    pub fn internal_client_join_request(&mut self, name: &str, identity: IsolateIdentity) -> Vec<MasterEventDispatch> {
+    pub fn internal_client_join_request(&mut self, name: &str, transaction_id: String, identity: IsolateIdentity) -> Vec<MasterEventDispatch> {
         if self.clients.contains_key(&identity) {
             return vec!(
-                DispatchToClient(identity, ClientJoinResponse { success: false, error: Some(ExternalError::from(ErrorCode::ClientIdConflict)) })
+                DispatchToClient(identity, ClientJoinResponse {
+                    transaction_id,
+                    success: false,
+                    error: Some(ExternalError::from(ErrorCode::ClientIdConflict)),
+                })
             );
         }
         if !self.active {
             return vec!(
-                DispatchToClient(identity, ClientJoinResponse { success: false, error: Some(ExternalError::from(ErrorCode::NotActive)) })
+                DispatchToClient(identity, ClientJoinResponse {
+                    transaction_id,
+                    success: false,
+                    error: Some(ExternalError::from(ErrorCode::NotActive)),
+                })
             );
         }
         match self.metadata.as_ref() {
             Some(m) => {
                 if self.clients.len() >= m.max_clients as usize {
                     return vec!(
-                        DispatchToClient(identity, ClientJoinResponse { success: false, error: Some(ExternalError::from(ErrorCode::ClientLimitExceeded)) })
+                        DispatchToClient(identity, ClientJoinResponse {
+                            transaction_id,
+                            success: false,
+                            error: Some(ExternalError::from(ErrorCode::ClientLimitExceeded)),
+                        })
                     );
                 }
             }
-            _ => {}
+            _ => {
+                self.logger.warn("Master has no metadata set!")
+            }
         }
         match self.manager.find_client(&identity) {
             Ok(client_ref) => {
                 self.clients.insert(identity.clone(), client_ref);
                 vec!(
-                    DispatchExternal(MasterExternalEvent::ClientJoined { name: name.to_string(), client: identity.to_string() }),
-                    DispatchToClient(identity, ClientJoinResponse { success: true, error: None })
+                    DispatchExternal(MasterExternalEvent::ClientJoined { name: name.to_string(), client_id: identity.to_string() }),
+                    DispatchToClient(identity, ClientJoinResponse { transaction_id, success: true, error: None })
                 )
             }
             Err(e) => {
-                vec!(DispatchToClient(identity, ClientJoinResponse { success: false, error: Some(ExternalError::from(e)) }))
+                vec!(DispatchToClient(identity, ClientJoinResponse {
+                    transaction_id,
+                    success: false,
+                    error: Some(ExternalError::from(e)),
+                }))
             }
         }
     }
 
     /// New message from some connected client
-    pub fn internal_client_message(&self, client_id: IsolateIdentity, transaction_id: String, format: String, data: String) -> MasterEventDispatch {
+    pub fn internal_client_message(&self, client_id: IsolateIdentity, transaction_id: String, data: String) -> Vec<MasterEventDispatch> {
         if !self.clients.contains_key(&client_id) {
-            return DispatchToClient(client_id, ClientInternalEvent::MessageFromClientResponse {
+            return vec!(DispatchToClient(client_id, ClientInternalEvent::MessageFromClientResponse {
                 transaction_id,
                 success: false,
                 error: Some(ExternalError::from(ErrorCode::NoMatchingClientId)),
-            });
+            }));
         }
 
-        DispatchExternal(MasterExternalEvent::MessageFromClient {
-            client: self.identity.to_string(),
-            transaction_id,
-            format,
+        vec!(DispatchExternal(MasterExternalEvent::MessageFromClient {
+            client_id: client_id.to_string(),
             data,
-        })
+        }), DispatchToClient(client_id, ClientInternalEvent::MessageFromClientResponse {
+            transaction_id,
+            success: true,
+            error: None,
+        }))
     }
 
     /// A client disappeared
@@ -126,16 +159,19 @@ impl MasterState {
             self.clients.remove(&identity);
         }
         self.logger.info(format!("Client disconnected: {}", reason));
-        MasterEventDispatch::DispatchNone
+        MasterEventDispatch::DispatchExternal(MasterExternalEvent::ClientDisconnected {
+            reason: reason.to_string(),
+            client_id: identity.to_string(),
+        })
     }
 
     /// New message from master to some connected client
-    pub fn external_message_to_client(&self, client_id: String, transaction_id: String, format: String, data: String) -> MasterEventDispatch {
+    pub fn external_message_to_client(&self, client_id: String, transaction_id: String, data: String) -> MasterEventDispatch {
         // Attempt to resolve identity
         let identity = match IsolateIdentity::try_from(&client_id) {
             Ok(s) => s,
             Err(_) => {
-                return DispatchExternal(MasterExternalEvent::MessageToClientResponse {
+                return DispatchExternal(MasterExternalEvent::TransactionResult {
                     transaction_id,
                     success: false,
                     error: Some(ExternalError::from(ErrorCode::InvalidClientIdentityToken)),
@@ -145,7 +181,7 @@ impl MasterState {
 
         // Check we know about that client
         if !self.clients.contains_key(&identity) {
-            return DispatchExternal(MasterExternalEvent::MessageToClientResponse {
+            return DispatchExternal(MasterExternalEvent::TransactionResult {
                 transaction_id,
                 success: false,
                 error: Some(ExternalError::from(ErrorCode::NoMatchingClientId)),
@@ -154,14 +190,12 @@ impl MasterState {
 
         // If that all worked, send the message onwards
         DispatchToClient(identity, ClientInternalEvent::MessageFromMaster {
-            transaction_id,
-            format,
             data,
         })
     }
 
     /// The master itself disconnected for some reason.
-    /// End the game session, notify all clients
+    /// End the session session, notify all clients
     pub fn external_master_disconnected(&mut self, reason: &str) -> Vec<MasterEventDispatch> {
         self.active = false;
 

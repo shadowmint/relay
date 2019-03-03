@@ -13,16 +13,16 @@ use relay::events::master_event::MasterControlEvent;
 #[test]
 pub fn main() {
     let mut harness = RelayTestHarness::new();
-    let (master, clients) = harness.create_game("Hello World", 1, 2);
+    let (master, clients) = harness.create_session("Hello World", 1, 2);
 
-    // Wait for the client to join
-    match clients[0].receiver.recv() {
+    // Read from the master and send a message to all clients
+    match master.receiver.recv() {
         Ok(event) => {
             match event {
-                ClientEvent::External(external) => {
+                MasterEvent::External(external) => {
                     match external {
-                        ClientExternalEvent::JoinResponse { success, error } => {
-                            assert!(success);
+                        MasterExternalEvent::ClientJoined { client_id: _, name } => {
+                            assert_eq!(name, "Player 0")
                         }
                         _ => unreachable!()
                     }
@@ -36,18 +36,33 @@ pub fn main() {
     // Send a message from a client to the master
     clients[0].sender.send(ClientEvent::External(ClientExternalEvent::MessageFromClient {
         transaction_id: "1".to_string(),
-        format: "TEXT".to_string(),
         data: "Hello world".to_string(),
-    }));
+    })).unwrap();
 
-    // Read from the master and send a message to all clients
+    // Get a transaction result from sending the message
+    match clients[0].receiver.recv() {
+        Ok(event) => {
+            match event {
+                ClientEvent::External(external) => {
+                    match external {
+                        ClientExternalEvent::TransactionResult { transaction_id: _, success: _, error: _ } => {}
+                        _ => unreachable!()
+                    }
+                }
+                _ => unreachable!()
+            }
+        }
+        _ => unreachable!()
+    };
+
+    // Read from the master and get the id of the sender
     let identity = match master.receiver.recv() {
         Ok(event) => {
             match event {
                 MasterEvent::External(external) => {
                     match external {
-                        MasterExternalEvent::ClientJoined { client, name } => {
-                            client
+                        MasterExternalEvent::MessageFromClient { client_id, data: _ } => {
+                            client_id
                         }
                         _ => unreachable!()
                     }
@@ -63,11 +78,10 @@ pub fn main() {
 
     // Send a response
     master.sender.send(MasterEvent::External(MasterExternalEvent::MessageToClient {
-        client: identity,
+        client_id: identity,
         transaction_id: "1".to_string(),
-        format: "TEXT".to_string(),
         data: "Hello world back!".to_string(),
-    }));
+    })).unwrap();
 
     // Read from the clients
     match clients[0].receiver.recv() {
@@ -75,9 +89,7 @@ pub fn main() {
             match event {
                 ClientEvent::External(external) => {
                     match external {
-                        ClientExternalEvent::MessageToClient { transaction_id, format, data } => {
-                            assert_eq!(transaction_id, "1");
-                            assert_eq!(format, "TEXT");
+                        ClientExternalEvent::MessageToClient { data } => {
                             assert_eq!(data, "Hello world back!");
                         }
                         _ => unreachable!()

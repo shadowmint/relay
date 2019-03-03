@@ -11,8 +11,8 @@ use rust_isolate::IsolateChannel;
 use crate::server::server_error::ServerError;
 use crate::events::client_event::ClientExternalEvent;
 use crate::events::master_event::MasterExternalEvent;
-use crate::events::master_event::MasterExternalEvent::MasterDisconnected;
-use crate::events::client_event::ClientExternalEvent::ClientDisconnected;
+use crate::events::master_event::MasterControlEvent::MasterDisconnected;
+use crate::events::client_event::ClientControlEvent::ClientDisconnected;
 use std::error::Error;
 use std::thread;
 
@@ -210,7 +210,12 @@ impl Handler for ServerConnection {
                 if self.state.is_none() {
                     self.pick_state_from(&message);
                 }
-                self.dispatch_message(&message);
+                match self.dispatch_message(&message) {
+                    Ok(_) => {},
+                    Err(e) => {
+                        self.logger.warn(format!("Failed to dispatch message: {:?}: {}", e, message));
+                    }
+                }
             }
             _ => {
                 self.logger.warn("Discarded binary chunk");
@@ -223,10 +228,10 @@ impl Handler for ServerConnection {
         let reason = format!("Connection closing due to ({:?}) {}", code, reason);
         match &self.state {
             ServerConnectionState::Master(channel) => {
-                self.send(channel, MasterEvent::External(MasterDisconnected { reason }));
+                self.send(channel, MasterEvent::Control(MasterDisconnected { reason }));
             }
             ServerConnectionState::Client(channel) => {
-                self.send(channel, ClientEvent::External(ClientDisconnected { reason }));
+                self.send(channel, ClientEvent::Control(ClientDisconnected { reason }));
             }
             ServerConnectionState::None => {}
         }

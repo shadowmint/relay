@@ -54,19 +54,15 @@ impl MasterIsolate {
         match event {
             MasterEvent::External(e) => {
                 match e {
-                    MasterExternalEvent::InitializeMaster(metadata) => {
-                        let response = self.state.external_initialize(metadata);
+                    MasterExternalEvent::InitializeMaster { transaction_id, metadata } => {
+                        let response = self.state.external_initialize(transaction_id, metadata);
                         self.send(response);
                     }
-                    MasterExternalEvent::MessageToClient { client, transaction_id, format, data } => {
-                        let response = self.state.external_message_to_client(client, transaction_id, format, data);
+                    MasterExternalEvent::MessageToClient { client_id, transaction_id, data } => {
+                        let response = self.state.external_message_to_client(client_id, transaction_id, data);
                         self.send(response);
                     }
-                    MasterExternalEvent::MasterDisconnected { reason } => {
-                        let response = self.state.external_master_disconnected(&reason);
-                        self.send_many(response);
-                        return Err(()); // Halt
-                    }
+
                     _ => {
                         self.logger.warn(format!("Dispatch failed to process unknown message: {:?}", e));
                     }
@@ -74,13 +70,13 @@ impl MasterIsolate {
             }
             MasterEvent::Internal(e) => {
                 match e {
-                    MasterInternalEvent::ClientJoinRequest { client_id, identity } => {
-                        let response = self.state.internal_client_join_request(&client_id, identity);
+                    MasterInternalEvent::ClientJoinRequest { transaction_id, client_id, identity } => {
+                        let response = self.state.internal_client_join_request(&client_id, transaction_id, identity);
                         self.send_many(response);
                     }
-                    MasterInternalEvent::MessageFromClient { client, transaction_id, format, data } => {
-                        let response = self.state.internal_client_message(client, transaction_id, format, data);
-                        self.send(response);
+                    MasterInternalEvent::MessageFromClient { client_id, transaction_id, data } => {
+                        let response = self.state.internal_client_message(client_id, transaction_id, data);
+                        self.send_many(response);
                     }
                     MasterInternalEvent::ClientDisconnected { identity, reason } => {
                         let response = self.state.internal_client_disconnected(identity, &reason);
@@ -91,6 +87,11 @@ impl MasterIsolate {
             MasterEvent::Control(e) => {
                 match e {
                     MasterControlEvent::Halt => return Err(()),
+                    MasterControlEvent::MasterDisconnected { reason } => {
+                        let response = self.state.external_master_disconnected(&reason);
+                        self.send_many(response);
+                        return Err(()); // Halt
+                    }
                 }
             }
         }
@@ -147,24 +148,25 @@ impl MasterIsolate {
                 }
             }
             None => {
-                self.logger.warn(format!("Unable to send event to unknown client {:?}: {:?}", identity, output));
+                // Fallback; we don't own this client, but maybe we need to send a message to it
+                // anyway, for example, for rejected client messages.
+                match self.state.get_external_client(&identity) {
+                    Some(client_channel) => {
+                        self.logger.outgoing_event(&output);
+                        match client_channel.sender.send(output) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                self.logger.warn(format!("Failed to send event to {:?}: {}", identity, e.description()));
+                            }
+                        }
+                    }
+                    None => {
+                        self.logger.warn(format!("Unable to send event to unknown client {:?}: {:?}", identity, output));
+                    }
+                }
             }
         }
     }
-    /*
-
-    /// Send some internal event
-    fn send_internal(&self, event: MasterExternalEvent) {
-        match self.external.as_ref() {
-            Some(channel) => {
-                self.logger.outgoing_event(&event);
-                let _ = channel.sender.send(MasterEvent::External(event));
-            }
-            _ => {}
-        };
-    }
-
-    */
 }
 
 impl Isolate<MasterEvent> for MasterIsolate {

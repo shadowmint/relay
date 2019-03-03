@@ -25,7 +25,7 @@ impl SessionManager {
         }
     }
 
-    /// Register a new game, if there isn't a conflict in the requested name
+    /// Register a new session, if there isn't a conflict in the requested name
     pub fn register_session(&self, identity: &IsolateIdentity, name: &str) -> Result<(), SessionManagerError> {
         let mut inner = self.inner.lock()?;
         inner.register_session(identity, name)
@@ -45,7 +45,7 @@ impl SessionManager {
         Ok(master_ref)
     }
 
-    /// Find a registered game by name
+    /// Find a registered session by name
     pub fn find_client(&self, identity: &IsolateIdentity) -> Result<IsolateChannel<ClientEvent>, SessionManagerError> {
         let inner = self.inner.lock()?;
         let client_ref = inner.find_client(identity)?;

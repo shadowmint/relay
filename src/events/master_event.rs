@@ -6,43 +6,44 @@ use rust_isolate::IsolateIdentity;
 #[derive(Debug)]
 pub enum MasterInternalEvent {
     /// A request from a client to join this master
-    ClientJoinRequest { client_id: String, identity: IsolateIdentity },
+    ClientJoinRequest { transaction_id: String, client_id: String, identity: IsolateIdentity },
 
     /// A client disconnected
     ClientDisconnected { identity: IsolateIdentity, reason: String },
 
     /// Send a message to the master
-    MessageFromClient { client: IsolateIdentity, transaction_id: String, format: String, data: String },
+    MessageFromClient { transaction_id: String, client_id: IsolateIdentity, data: String },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "object_type")]
 pub enum MasterExternalEvent {
     /// Sent by the client application to initialize a new session
-    InitializeMaster(MasterMetadata),
-
-    /// Sent by the application to notify about initialization state (ready, error, etc)
-    InitializeMasterResponse { success: bool, error: Option<ExternalError> },
-
-    /// Notify the master that a client joined
-    ClientJoined { client: String, name: String },
-
-    /// Send a message to the external master
-    MessageFromClient { client: String, transaction_id: String, format: String, data: String },
+    InitializeMaster { transaction_id: String, metadata: MasterMetadata },
 
     /// Recv a message from the external master to send to a client
-    MessageToClient { client: String, transaction_id: String, format: String, data: String },
+    MessageToClient { transaction_id: String, client_id: String, data: String },
 
-    /// The response to sending a message to a client
-    MessageToClientResponse { transaction_id: String, success: bool, error: Option<ExternalError> },
+    /// Sent by the application to notify about transaction result
+    TransactionResult { transaction_id: String, success: bool, error: Option<ExternalError> },
 
-    /// The master disconnected for some reason; this is a session ender
-    MasterDisconnected { reason: String },
+    /// Notify the master that a client joined
+    ClientJoined { client_id: String, name: String },
+
+    /// A client disconnected for some reason, a notification for the external master
+    ClientDisconnected { client_id: String, reason: String },
+
+    /// Send a message to the external master
+    MessageFromClient { client_id: String, data: String },
 }
 
 #[derive(Debug)]
 pub enum MasterControlEvent {
     /// Unconditionally halt immediately
-    Halt
+    Halt,
+
+    /// Sent by the websocket to notify of a master disconnect
+    MasterDisconnected { reason: String },
 }
 
 #[derive(Debug)]

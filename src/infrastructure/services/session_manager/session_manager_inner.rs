@@ -22,7 +22,7 @@ impl SessionManagerInner {
         }
     }
 
-    /// Register a new game, if there isn't a conflict in the requested name
+    /// Register a new session, if there isn't a conflict in the requested name
     pub fn register_session(&mut self, identity: &IsolateIdentity, name: &str) -> Result<(), SessionManagerError> {
         if self.sessions.contains_key(name) {
             return Err(SessionManagerError::NameAlreadyInUse);
@@ -42,7 +42,7 @@ impl SessionManagerInner {
 
     /// Find a registered master by name
     pub fn find_master(&self, name: &str) -> Result<IsolateChannel<MasterEvent>, SessionManagerError> {
-        // Find the game
+        // Find the session
         let identity = self.sessions.get(name);
         if identity.is_none() {
             return Err(SessionManagerError::NoMatchingMaster);

@@ -13,7 +13,7 @@ use relay::model::client_metadata::ClientMetadata;
 #[test]
 pub fn main() {
     let mut harness = RelayTestHarness::new();
-    let (master, clients) = harness.create_game("Hello World", 1, 2);
+    let (master, clients) = harness.create_session("Hello World", 1, 2);
 
     // Wait for processing to finish
     thread::sleep(Duration::from_millis(100));

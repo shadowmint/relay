@@ -44,40 +44,52 @@ impl ClientState {
     }
 
     /// External initialize
-    pub fn external_initialize(&mut self, metadata: ClientMetadata) -> ClientEventDispatch {
-        self.name = metadata.client_id.clone();
+    pub fn external_initialize(&mut self, transaction_id: String, metadata: ClientMetadata) -> ClientEventDispatch {
+        self.name = metadata.name.clone();
         self.active = true;
-        DispatchExternal(ClientExternalEvent::InitializeClientResponse { success: true, error: None })
+        DispatchExternal(ClientExternalEvent::TransactionResult {
+            transaction_id,
+            success: true,
+            error: None,
+        })
     }
 
     /// External request to join a master
-    pub fn external_join(&mut self, master_id: &str) -> ClientEventDispatch {
-        // First, lets see if we can lookup the game
+    pub fn external_join(&mut self, transaction_id: String, master_id: &str) -> ClientEventDispatch {
+        // First, lets see if we can lookup the session
         match self.manager.find_master(&master_id) {
-            Ok(game_ref) => {
+            Ok(session_ref) => {
                 // If we got the master, update to refer to it, and pass the request to join to the master
-                self.master = Some(game_ref);
-                DispatchInternal(MasterInternalEvent::ClientJoinRequest { client_id: self.name.clone(), identity: self.identity.clone() })
+                self.master = Some(session_ref);
+                DispatchInternal(MasterInternalEvent::ClientJoinRequest {
+                    transaction_id,
+                    client_id: self.name.clone(),
+                    identity: self.identity.clone(),
+                })
             }
             Err(e) => {
-                DispatchExternal(ClientExternalEvent::JoinResponse { success: false, error: Some(ExternalError::from(e)) })
+                DispatchExternal(ClientExternalEvent::TransactionResult {
+                    transaction_id,
+                    success: false,
+                    error: Some(ExternalError::from(e)),
+                })
             }
         }
     }
 
     /// External new message from the client
-    pub fn external_message(&self, transaction_id: String, format: String, data: String) -> ClientEventDispatch {
+    pub fn external_message(&self, transaction_id: String, data: String) -> ClientEventDispatch {
         if !self.connected {
-            return DispatchExternal(ClientExternalEvent::JoinResponse {
+            return DispatchExternal(ClientExternalEvent::TransactionResult {
+                transaction_id,
                 success: false,
                 error: Some(ExternalError::from(ErrorCode::ClientNotConnected)),
             });
         }
 
         DispatchInternal(MasterInternalEvent::MessageFromClient {
-            client: self.identity.clone(),
             transaction_id,
-            format,
+            client_id: self.identity.clone(),
             data,
         })
     }
@@ -91,20 +103,35 @@ impl ClientState {
     }
 
     /// Response internally from a join request
-    pub fn internal_join_response(&mut self, success: bool, error: Option<ExternalError>) -> ClientEventDispatch {
+    pub fn internal_join_response(&mut self, transaction_id: String, success: bool, error: Option<ExternalError>) -> ClientEventDispatch {
         if !success {
-            return DispatchExternal(ClientExternalEvent::JoinResponse { success: false, error });
+            return DispatchExternal(ClientExternalEvent::TransactionResult {
+                transaction_id,
+                success: false,
+                error,
+            });
         }
 
         self.connected = true;
-        return DispatchExternal(ClientExternalEvent::JoinResponse { success: true, error: None });
+        return DispatchExternal(ClientExternalEvent::TransactionResult {
+            transaction_id,
+            success: true,
+            error: None,
+        });
+    }
+
+    /// Response internally from a message to master request
+    pub fn internal_message_response(&mut self, transaction_id: String, success: bool, error: Option<ExternalError>) -> ClientEventDispatch {
+        return DispatchExternal(ClientExternalEvent::TransactionResult {
+            transaction_id,
+            success,
+            error,
+        });
     }
 
     /// Forward a message from the master to the external connection
-    pub fn internal_message_from_master(&mut self, transaction_id: String, format: String, data: String) -> ClientEventDispatch {
+    pub fn internal_message_from_master(&mut self, data: String) -> ClientEventDispatch {
         return DispatchExternal(ClientExternalEvent::MessageToClient {
-            transaction_id,
-            format,
             data,
         });
     }

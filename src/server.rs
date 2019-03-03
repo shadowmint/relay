@@ -4,7 +4,6 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use crate::server::server_connection_factory::ServerConnectionFactory;
 use ws::listen;
-use ws::Handler;
 
 pub mod server_config;
 pub mod server_error;

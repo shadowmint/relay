@@ -52,24 +52,19 @@ impl ClientIsolate {
         match event {
             ClientEvent::External(e) => {
                 match e {
-                    ClientExternalEvent::InitializeClient(metadata) => {
-                        let response = self.state.external_initialize(metadata);
+                    ClientExternalEvent::InitializeClient { transaction_id, metadata } => {
+                        let response = self.state.external_initialize(transaction_id, metadata);
                         self.send(response);
                     }
-                    ClientExternalEvent::Join { game_name } => {
-                        let response = self.state.external_join(&game_name);
+                    ClientExternalEvent::Join { transaction_id, session_id } => {
+                        let response = self.state.external_join(transaction_id, &session_id);
                         self.send(response);
                     }
-                    ClientExternalEvent::MessageFromClient { transaction_id, format, data } => {
-                        let response = self.state.external_message(transaction_id, format, data);
+                    ClientExternalEvent::MessageFromClient { transaction_id, data } => {
+                        let response = self.state.external_message(transaction_id, data);
                         self.send(response);
                     }
-                    ClientExternalEvent::ClientDisconnected { reason } => {
-                        let response = self.state.external_disconnect(&reason);
-                        self.send(response);
-                        self.logger.warn(format!("Disconnected: {}", reason));
-                        return Err(())
-                    }
+
                     _ => {
                         self.logger.warn(format!("Dispatch failed to process unknown message: {:?}", e));
                     }
@@ -77,19 +72,23 @@ impl ClientIsolate {
             }
             ClientEvent::Internal(e) => {
                 match e {
-                    ClientInternalEvent::ClientJoinResponse { success, error } => {
-                        let response = self.state.internal_join_response(success, error);
+                    ClientInternalEvent::ClientJoinResponse { transaction_id, success, error } => {
+                        let response = self.state.internal_join_response(transaction_id, success, error);
                         self.send(response);
                     }
-                    ClientInternalEvent::MessageFromMaster { transaction_id, format, data } => {
-                        let response = self.state.internal_message_from_master(transaction_id, format, data);
+                    ClientInternalEvent::MessageFromClientResponse { transaction_id, success, error } => {
+                        let response = self.state.internal_message_response(transaction_id, success, error);
+                        self.send(response);
+                    }
+                    ClientInternalEvent::MessageFromMaster { data } => {
+                        let response = self.state.internal_message_from_master(data);
                         self.send(response);
                     }
                     ClientInternalEvent::MasterDisconnected { reason } => {
                         let response = self.state.internal_master_disconnect(&reason);
                         self.send(response);
                         self.logger.warn(format!("Disconnected: Master disconnected: {}", reason));
-                        return Err(())
+                        return Err(());
                     }
                     _ => {
                         self.logger.warn(format!("Dispatch failed to process unknown message: {:?}", e));
@@ -99,6 +98,12 @@ impl ClientIsolate {
             ClientEvent::Control(e) => {
                 match e {
                     ClientControlEvent::Halt => return Err(()),
+                    ClientControlEvent::ClientDisconnected { reason } => {
+                        let response = self.state.external_disconnect(&reason);
+                        self.send(response);
+                        self.logger.warn(format!("Disconnected: {}", reason));
+                        return Err(());
+                    }
                 }
             }
         }
