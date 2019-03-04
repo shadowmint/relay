@@ -1,13 +1,13 @@
 use std::error::Error;
-use relay::events::client_event::ClientExternalEvent;
-use relay::model::client_metadata::ClientMetadata;
-use relay::model::external_error::ExternalError;
-use relay::CLIENT;
+use relay_core::events::client_event::ClientExternalEvent;
+use relay_core::model::client_metadata::ClientMetadata;
+use relay_core::model::external_error::ExternalError;
+use relay_core::CLIENT;
 use serde::Serialize;
 use std::fmt::Debug;
-use relay::MASTER;
-use relay::events::master_event::MasterExternalEvent;
-use relay::model::master_metadata::MasterMetadata;
+use relay_core::MASTER;
+use relay_core::events::master_event::MasterExternalEvent;
+use relay_core::model::master_metadata::MasterMetadata;
 
 fn main() {
     // Sent by the client application to initialize a new session

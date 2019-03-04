@@ -17,13 +17,11 @@ name = "relay-schema"
 path = "bin/relay-schema.rs"
 
 [dependencies]
-rust-isolate = {  git = "https://github.com/shadowmint/rust-isolate", branch = "master"}
-base-logging = {  git = "https://github.com/shadowmint/rust-base-logging", branch = "master"}
-names = "0.10.0"
-uuid = {version = "0.7", features = ["v4"]}
-crossbeam = "0.7.1"
-serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
+relay-core = { path = "crates/relay-core" }
 toml = "0.4"
 ws = "0.7"
 getopts = "0.2"
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+rust-isolate = {  git = "https://github.com/shadowmint/rust-isolate", branch = "master"}
+crossbeam = "0.7.1"

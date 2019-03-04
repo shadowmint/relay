@@ -1,9 +1,9 @@
-use crate::events::client_event::ClientEvent;
-use crate::events::master_event::MasterEvent;
-use crate::events::master_event::MasterExternalEvent;
-use crate::events::client_event::ClientExternalEvent;
-use crate::model::client_metadata::ClientMetadata;
-use crate::model::master_metadata::MasterMetadata;
+use relay_core::events::client_event::ClientEvent;
+use relay_core::events::master_event::MasterEvent;
+use relay_core::events::master_event::MasterExternalEvent;
+use relay_core::events::client_event::ClientExternalEvent;
+use relay_core::model::client_metadata::ClientMetadata;
+use relay_core::model::master_metadata::MasterMetadata;
 use rust_isolate::IsolateChannel;
 use crate::server::server_connection_factory::ServerConnectionFactory;
 use crate::server::server_connection::ServerConnection;

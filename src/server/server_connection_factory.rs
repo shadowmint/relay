@@ -1,14 +1,14 @@
 use crate::server::server_error::ServerError;
 use rust_isolate::IsolateRegistry;
-use crate::infrastructure::services::SessionManager;
-use crate::CLIENT;
-use crate::MASTER;
-use crate::isolates::client::ClientIsolate;
-use crate::isolates::master::MasterIsolate;
+use relay_core::infrastructure::services::SessionManager;
+use relay_core::CLIENT;
+use relay_core::MASTER;
+use relay_core::isolates::client::ClientIsolate;
+use relay_core::isolates::master::MasterIsolate;
 use rust_isolate::IsolateRuntimeRef;
-use crate::events::master_event::MasterEvent;
-use crate::events::client_event::ClientEvent;
-use crate::infrastructure::relay_logger::RelayLogger;
+use relay_core::events::master_event::MasterEvent;
+use relay_core::events::client_event::ClientEvent;
+use relay_core::infrastructure::relay_logger::RelayLogger;
 use ws::Sender;
 use crate::server::server_connection::ServerConnection;
 

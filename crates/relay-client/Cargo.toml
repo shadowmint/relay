@@ -1,0 +1,7 @@
+[package]
+name = "relay-client"
+version = "0.1.0"
+authors = ["Douglas Linder <linderd@iinet.net.au>"]
+edition = "2018"
+
+[dependencies]

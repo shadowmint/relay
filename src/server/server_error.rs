@@ -4,8 +4,8 @@ use std::fmt::Display;
 use std::fmt;
 use rust_isolate::IsolateRuntimeError;
 use crossbeam::SendError;
-use crate::events::master_event::MasterEvent;
-use crate::events::client_event::ClientEvent;
+use relay_core::events::master_event::MasterEvent;
+use relay_core::events::client_event::ClientEvent;
 
 #[derive(Debug)]
 pub enum ServerError {

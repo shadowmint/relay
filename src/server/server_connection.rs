@@ -1,18 +1,18 @@
 use ws::Handler;
-use crate::infrastructure::relay_logger::RelayLogger;
+use relay_core::infrastructure::relay_logger::RelayLogger;
 use ws::Message;
 use ws::CloseCode;
 use ws;
 use ws::Sender;
 use rust_isolate::IsolateRuntimeRef;
-use crate::events::master_event::MasterEvent;
-use crate::events::client_event::ClientEvent;
+use relay_core::events::master_event::MasterEvent;
+use relay_core::events::client_event::ClientEvent;
 use rust_isolate::IsolateChannel;
 use crate::server::server_error::ServerError;
-use crate::events::client_event::ClientExternalEvent;
-use crate::events::master_event::MasterExternalEvent;
-use crate::events::master_event::MasterControlEvent::MasterDisconnected;
-use crate::events::client_event::ClientControlEvent::ClientDisconnected;
+use relay_core::events::client_event::ClientExternalEvent;
+use relay_core::events::master_event::MasterExternalEvent;
+use relay_core::events::master_event::MasterControlEvent::MasterDisconnected;
+use relay_core::events::client_event::ClientControlEvent::ClientDisconnected;
 use std::error::Error;
 use std::thread;
 

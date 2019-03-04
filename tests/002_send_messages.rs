@@ -1,14 +1,14 @@
 use relay::RelayTestHarness;
-use relay::events::client_event::ClientControlEvent;
-use relay::events::client_event::ClientExternalEvent;
-use relay::events::master_event::MasterEvent;
-use relay::events::client_event::ClientEvent;
+use relay_core::events::client_event::ClientControlEvent;
+use relay_core::events::client_event::ClientExternalEvent;
+use relay_core::events::master_event::MasterEvent;
+use relay_core::events::client_event::ClientEvent;
 use std::thread;
 use std::time::Duration;
-use relay::model::master_metadata::MasterMetadata;
-use relay::model::client_metadata::ClientMetadata;
-use relay::events::master_event::MasterExternalEvent;
-use relay::events::master_event::MasterControlEvent;
+use relay_core::model::master_metadata::MasterMetadata;
+use relay_core::model::client_metadata::ClientMetadata;
+use relay_core::events::master_event::MasterExternalEvent;
+use relay_core::events::master_event::MasterControlEvent;
 
 #[test]
 pub fn main() {
