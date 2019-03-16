@@ -9,7 +9,7 @@ pub use relay_auth_config::RelayAuthConfig;
 pub use relay_auth_error::RelayAuthError;
 
 pub use relay_auth_events::Claim;
-pub use relay_auth_events::Token;
+pub use relay_auth_events::Claims;
 pub use relay_auth_events::RelayAuthEvent;
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 use crate::RelayAuthConfig;
 use crate::RelayAuthError;
-use crate::Token;
+use crate::Claims;
 use crate::relay_hasher::RelayHasher;
 
 pub struct RelayAuth {
@@ -11,14 +11,14 @@ pub struct RelayAuth {
 impl RelayAuth {
     pub fn new(config: RelayAuthConfig) -> RelayAuth {
         RelayAuth {
-            config,
-            hasher: RelayHasher::new(),
+            config: config.clone(),
+            hasher: RelayHasher::new(config),
         }
     }
 
     /// Validate an AuthToken and return a list of valid claims.
     /// The config controls if bad claims are discarded or errors.
-    pub fn load(&mut self, token: Token) -> Result<(), RelayAuthError> {
+    pub fn load(&mut self, token: Claims) -> Result<(), RelayAuthError> {
         Err(RelayAuthError::NotImplemented)
     }
 

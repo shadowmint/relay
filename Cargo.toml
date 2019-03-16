@@ -25,3 +25,5 @@ serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 rust-isolate = {  git = "https://github.com/shadowmint/rust-isolate", branch = "master"}
 crossbeam = "0.7.1"
+relay-logging = { path = "crates/relay-logging" }
+relay-analytics = { path = "crates/relay-analytics" }
