@@ -43,7 +43,7 @@ impl RelayTestHarness {
                 match r {
                     MasterEvent::External(er) => {
                         match er {
-                            MasterExternalEvent::TransactionResult { transaction_id, success, error } => {
+                            MasterExternalEvent::TransactionResult { transaction_id:_, success, error } => {
                                 assert!(success);
                                 assert!(error.is_none());
                             }
@@ -75,7 +75,7 @@ impl RelayTestHarness {
                     match r {
                         ClientEvent::External(er) => {
                             match er {
-                                ClientExternalEvent::TransactionResult { transaction_id, success, error: _ } => {
+                                ClientExternalEvent::TransactionResult { transaction_id:_, success, error: _ } => {
                                     assert!(success);
                                 }
                                 _ => unreachable!()
@@ -99,7 +99,7 @@ impl RelayTestHarness {
                     match r {
                         ClientEvent::External(er) => {
                             match er {
-                                ClientExternalEvent::TransactionResult { transaction_id, success, error } => {
+                                ClientExternalEvent::TransactionResult { transaction_id:_, success, error } => {
                                     assert!(success);
                                     assert!(error.is_none());
                                 }

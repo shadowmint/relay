@@ -5,7 +5,7 @@ use rust_isolate::IsolateIdentity;
 use rust_isolate::IsolateChannel;
 use crate::events::client_event::ClientEvent;
 use crate::events::master_event::MasterEvent;
-use crate::infrastructure::relay_logger::RelayLogger;
+use relay_logging::RelayEventLogger;
 use crate::events::master_event::MasterExternalEvent;
 use crate::infrastructure::services::SessionManager;
 use crate::events::master_event::MasterControlEvent;
@@ -13,7 +13,7 @@ use crate::isolates::master::master_state::MasterState;
 use crate::isolates::master::MasterEventDispatch::DispatchExternal;
 use crate::events::master_event::MasterInternalEvent;
 use crate::events::client_event::ClientInternalEvent;
-use crate::MASTER;
+use crate::{MASTER, NO_IDENTITY};
 use crate::isolates::master::MasterEventDispatch::DispatchToClient;
 use std::error::Error;
 
@@ -25,14 +25,14 @@ pub enum MasterEventDispatch {
 }
 
 pub struct MasterIsolate {
-    logger: RelayLogger,
+    logger: RelayEventLogger,
     external: Option<IsolateChannel<MasterEvent>>,
     state: MasterState,
 }
 
 impl MasterIsolate {
     pub fn new(manager: SessionManager) -> MasterIsolate {
-        let logger = RelayLogger::new(None, MASTER);
+        let logger = RelayEventLogger::new(NO_IDENTITY, MASTER);
         MasterIsolate {
             state: MasterState::new(IsolateIdentity::new(), manager, logger.clone()),
             logger,
@@ -41,7 +41,7 @@ impl MasterIsolate {
     }
 
     pub fn instance(&self, identity: IsolateIdentity, channel: &IsolateChannel<MasterEvent>) -> MasterIsolate {
-        let logger = RelayLogger::new(Some(identity), MASTER);
+        let logger = RelayEventLogger::new(&identity.to_string(), MASTER);
         MasterIsolate {
             state: self.state.instance(identity, logger.clone()),
             logger,

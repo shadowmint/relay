@@ -7,6 +7,8 @@ edition = "2018"
 [dependencies]
 rust-isolate = {  git = "https://github.com/shadowmint/rust-isolate", branch = "master"}
 base-logging = {  git = "https://github.com/shadowmint/rust-base-logging", branch = "master"}
+relay-logging = { path = "../relay-logging" }
+relay-analytics = { path = "../relay-analytics" }
 names = "0.10.0"
 uuid = {version = "0.7", features = ["v4"]}
 crossbeam = "0.7.1"

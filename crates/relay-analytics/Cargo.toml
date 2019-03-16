@@ -1,9 +1,13 @@
 [package]
-name = "relay-logging"
+name = "relay-analytics"
 version = "0.1.0"
 authors = ["Douglas Linder <linderd@iinet.net.au>"]
 edition = "2018"
 
 [dependencies]
 base-logging = {  git = "https://github.com/shadowmint/rust-base-logging", branch = "master"}
-time = "0.1"
+rust-isolate = {  git = "https://github.com/shadowmint/rust-isolate", branch = "master"}
+relay-logging = { path = "../relay-logging" }
+futures = "0.1"
+crossbeam = "0.7.1"
+regex = "1"

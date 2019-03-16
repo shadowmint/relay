@@ -8,9 +8,11 @@ use relay_core::isolates::master::MasterIsolate;
 use rust_isolate::IsolateRuntimeRef;
 use relay_core::events::master_event::MasterEvent;
 use relay_core::events::client_event::ClientEvent;
-use relay_core::infrastructure::relay_logger::RelayLogger;
+use relay_logging::RelayLogger;
 use ws::Sender;
 use crate::server::server_connection::ServerConnection;
+use relay_analytics::AnalyticsService;
+use relay_analytics::analytics::Analytics;
 
 pub struct ServerConnectionFactory {
     logger: RelayLogger,
@@ -27,8 +29,9 @@ impl ServerConnectionFactory {
         let manager = SessionManager::new(registry.as_ref());
         let clients = registry.bind(CLIENT, ClientIsolate::new(manager.clone()))?;
         let masters = registry.bind(MASTER, MasterIsolate::new(manager.clone()))?;
+        AnalyticsService::bind(&mut registry)?;
         Ok(ServerConnectionFactory {
-            logger: RelayLogger::new(None, "websocket"),
+            logger: RelayLogger::new("Websocket"),
             manager,
             registry,
             masters,
@@ -40,6 +43,7 @@ impl ServerConnectionFactory {
     pub fn new_connection(&self, out: Option<Sender>) -> Result<ServerConnection, ServerError> {
         let clients = self.registry.find::<ClientEvent>(CLIENT)?;
         let masters = self.registry.find::<MasterEvent>(MASTER)?;
-        Ok(ServerConnection::new(out, masters, clients, self.logger.clone()))
+        let analytics = Analytics::new(self.registry.as_ref())?;
+        Ok(ServerConnection::new(out, masters, clients, analytics, self.logger.clone()))
     }
 }

@@ -1,5 +1,4 @@
 use ws::Handler;
-use relay_core::infrastructure::relay_logger::RelayLogger;
 use ws::Message;
 use ws::CloseCode;
 use ws;
@@ -15,6 +14,8 @@ use relay_core::events::master_event::MasterControlEvent::MasterDisconnected;
 use relay_core::events::client_event::ClientControlEvent::ClientDisconnected;
 use std::error::Error;
 use std::thread;
+use relay_logging::RelayLogger;
+use relay_analytics::analytics::Analytics;
 
 pub enum ServerEvent {
     Client(ClientEvent),
@@ -40,14 +41,16 @@ pub struct ServerConnection {
     state: ServerConnectionState,
     output: Option<Sender>,
     logger: RelayLogger,
+    analytics: Analytics,
     pub masters: IsolateRuntimeRef<MasterEvent>,
     pub clients: IsolateRuntimeRef<ClientEvent>,
 }
 
 impl ServerConnection {
-    pub fn new(output: Option<Sender>, masters: IsolateRuntimeRef<MasterEvent>, clients: IsolateRuntimeRef<ClientEvent>, logger: RelayLogger) -> ServerConnection {
+    pub fn new(output: Option<Sender>, masters: IsolateRuntimeRef<MasterEvent>, clients: IsolateRuntimeRef<ClientEvent>, analytics: Analytics, logger: RelayLogger) -> ServerConnection {
         ServerConnection {
             state: ServerConnectionState::None,
+            analytics,
             output,
             masters,
             clients,
@@ -96,6 +99,8 @@ impl ServerConnection {
         let channel = self.masters.spawn()?;
         self.spawn_master_reader(channel.clone().unwrap());
         self.state = ServerConnectionState::Master(channel);
+        self.analytics.track_event("master", 1);
+        self.analytics.track_event("master_total", 1);
         Ok(())
     }
 
@@ -104,6 +109,8 @@ impl ServerConnection {
         let channel = self.clients.spawn()?;
         self.spawn_client_reader(channel.clone().unwrap());
         self.state = ServerConnectionState::Client(channel);
+        self.analytics.track_event("client", 1);
+        self.analytics.track_event("client_total", 1);
         Ok(())
     }
 
@@ -208,10 +215,15 @@ impl Handler for ServerConnection {
         match msg {
             Message::Text(message) => {
                 if self.state.is_none() {
-                    self.pick_state_from(&message);
+                    match self.pick_state_from(&message) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            self.logger.warn(format!("Failed to pick object state: {:?}: {}", e, message));
+                        }
+                    }
                 }
                 match self.dispatch_message(&message) {
-                    Ok(_) => {},
+                    Ok(_) => {}
                     Err(e) => {
                         self.logger.warn(format!("Failed to dispatch message: {:?}: {}", e, message));
                     }
@@ -229,9 +241,11 @@ impl Handler for ServerConnection {
         match &self.state {
             ServerConnectionState::Master(channel) => {
                 self.send(channel, MasterEvent::Control(MasterDisconnected { reason }));
+                self.analytics.track_event("master", -1);
             }
             ServerConnectionState::Client(channel) => {
                 self.send(channel, ClientEvent::Control(ClientDisconnected { reason }));
+                self.analytics.track_event("client", -1);
             }
             ServerConnectionState::None => {}
         }

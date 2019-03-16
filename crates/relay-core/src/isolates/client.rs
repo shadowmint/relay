@@ -4,7 +4,7 @@ use rust_isolate::Isolate;
 use rust_isolate::IsolateIdentity;
 use rust_isolate::IsolateChannel;
 use crate::events::client_event::ClientEvent;
-use crate::infrastructure::relay_logger::RelayLogger;
+use relay_logging::RelayEventLogger;
 use crate::infrastructure::services::SessionManager;
 use crate::isolates::client::client_state::ClientState;
 use crate::events::client_event::ClientExternalEvent;
@@ -13,7 +13,7 @@ use crate::isolates::client::ClientEventDispatch::DispatchExternal;
 use crate::events::client_event::ClientInternalEvent;
 use crate::events::master_event::MasterInternalEvent;
 use crate::events::master_event::MasterEvent;
-use crate::CLIENT;
+use crate::{CLIENT, NO_IDENTITY};
 use std::error::Error;
 use crate::isolates::client::ClientEventDispatch::DispatchInternal;
 
@@ -25,7 +25,7 @@ pub enum ClientEventDispatch {
 }
 
 pub struct ClientIsolate {
-    logger: RelayLogger,
+    logger: RelayEventLogger,
     external: Option<IsolateChannel<ClientEvent>>,
     state: ClientState,
 }
@@ -34,7 +34,7 @@ impl ClientIsolate {
     pub fn new(manager: SessionManager) -> ClientIsolate {
         ClientIsolate {
             state: ClientState::new(IsolateIdentity::new(), manager),
-            logger: RelayLogger::new(None, CLIENT),
+            logger: RelayEventLogger::new(NO_IDENTITY, CLIENT),
             external: None,
         }
     }
@@ -42,7 +42,7 @@ impl ClientIsolate {
     pub fn instance(&self, identity: IsolateIdentity, channel: &IsolateChannel<ClientEvent>) -> ClientIsolate {
         ClientIsolate {
             state: self.state.instance(identity),
-            logger: RelayLogger::new(Some(identity), CLIENT),
+            logger: RelayEventLogger::new(&identity.to_string(), CLIENT),
             external: Some(channel.clone().unwrap()),
         }
     }
@@ -89,9 +89,6 @@ impl ClientIsolate {
                         self.send(response);
                         self.logger.warn(format!("Disconnected: Master disconnected: {}", reason));
                         return Err(());
-                    }
-                    _ => {
-                        self.logger.warn(format!("Dispatch failed to process unknown message: {:?}", e));
                     }
                 }
             }

@@ -1,7 +1,9 @@
 [package]
-name = "relay-client"
+name = "relay-auth"
 version = "0.1.0"
 authors = ["Douglas Linder <linderd@iinet.net.au>"]
 edition = "2018"
 
 [dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }

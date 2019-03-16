@@ -5,8 +5,6 @@ use relay_core::events::master_event::MasterEvent;
 use relay_core::events::client_event::ClientEvent;
 use std::thread;
 use std::time::Duration;
-use relay_core::model::master_metadata::MasterMetadata;
-use relay_core::model::client_metadata::ClientMetadata;
 use relay_core::events::master_event::MasterExternalEvent;
 use relay_core::events::master_event::MasterControlEvent;
 

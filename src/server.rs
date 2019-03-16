@@ -26,10 +26,10 @@ impl Server {
                 Ok(factory_ref) => {
                     match factory_ref.new_connection(Some(out)) {
                         Ok(connection) => connection,
-                        Err(e) => panic!("Failed to spawn connection")
+                        Err(_) => panic!("Failed to spawn connection")
                     }
                 }
-                Err(e) => panic!("Factory runtime is poisoned")
+                Err(_) => panic!("Factory runtime is poisoned")
             }
         })?;
         Ok(())

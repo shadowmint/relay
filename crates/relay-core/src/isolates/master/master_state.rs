@@ -12,12 +12,11 @@ use crate::events::client_event::ClientEvent;
 use crate::isolates::master::MasterEventDispatch::DispatchToClient;
 use crate::events::client_event::ClientInternalEvent::ClientJoinResponse;
 use crate::events::client_event::ClientInternalEvent;
-use crate::infrastructure::relay_logger::RelayLogger;
-use crate::isolates::client::ClientEventDispatch::DispatchInternal;
+use relay_logging::RelayEventLogger;
 
 pub struct MasterState {
     name: String,
-    logger: RelayLogger,
+    logger: RelayEventLogger,
     identity: IsolateIdentity,
     active: bool,
     metadata: Option<MasterMetadata>,
@@ -26,7 +25,7 @@ pub struct MasterState {
 }
 
 impl MasterState {
-    pub fn new(identity: IsolateIdentity, manager: SessionManager, logger: RelayLogger) -> MasterState {
+    pub fn new(identity: IsolateIdentity, manager: SessionManager, logger: RelayEventLogger) -> MasterState {
         MasterState {
             logger,
             manager,
@@ -38,7 +37,7 @@ impl MasterState {
         }
     }
 
-    pub fn instance(&self, identity: IsolateIdentity, logger: RelayLogger) -> MasterState {
+    pub fn instance(&self, identity: IsolateIdentity, logger: RelayEventLogger) -> MasterState {
         MasterState {
             logger,
             manager: self.manager.clone(),
