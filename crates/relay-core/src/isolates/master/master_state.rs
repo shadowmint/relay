@@ -165,32 +165,39 @@ impl MasterState {
     }
 
     /// New message from master to some connected client
-    pub fn external_message_to_client(&self, client_id: String, transaction_id: String, data: String) -> MasterEventDispatch {
+    pub fn external_message_to_client(&self, client_id: String, transaction_id: String, data: String) -> Vec<MasterEventDispatch> {
         // Attempt to resolve identity
         let identity = match IsolateIdentity::try_from(&client_id) {
             Ok(s) => s,
             Err(_) => {
-                return DispatchExternal(MasterExternalEvent::TransactionResult {
+                return vec!(DispatchExternal(MasterExternalEvent::TransactionResult {
                     transaction_id,
                     success: false,
                     error: Some(ExternalError::from(ErrorCode::InvalidClientIdentityToken)),
-                });
+                }));
             }
         };
 
         // Check we know about that client
         if !self.clients.contains_key(&identity) {
-            return DispatchExternal(MasterExternalEvent::TransactionResult {
+            return vec!(DispatchExternal(MasterExternalEvent::TransactionResult {
                 transaction_id,
                 success: false,
                 error: Some(ExternalError::from(ErrorCode::NoMatchingClientId)),
-            });
+            }));
         }
 
-        // If that all worked, send the message onwards
-        DispatchToClient(identity, ClientInternalEvent::MessageFromMaster {
-            data,
-        })
+        // If that all worked, send the message onwards and resolve the transaction
+        vec!(
+            DispatchToClient(identity, ClientInternalEvent::MessageFromMaster {
+                data,
+            }),
+            DispatchExternal(MasterExternalEvent::TransactionResult {
+                transaction_id,
+                success: true,
+                error: None,
+            })
+        )
     }
 
     /// The master itself disconnected for some reason.

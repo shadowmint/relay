@@ -60,7 +60,7 @@ impl MasterIsolate {
                     }
                     MasterExternalEvent::MessageToClient { client_id, transaction_id, data } => {
                         let response = self.state.external_message_to_client(client_id, transaction_id, data);
-                        self.send(response);
+                        self.send_many(response);
                     }
 
                     _ => {
