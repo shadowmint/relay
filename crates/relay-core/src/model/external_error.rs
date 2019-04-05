@@ -12,6 +12,7 @@ pub enum ErrorCode {
     NoMatchingClientId,
     ClientNotConnected,
     NotActive,
+    AuthFailed,
 }
 
 /// For sending external errors

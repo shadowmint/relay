@@ -7,6 +7,8 @@ use relay_core::model::master_metadata::MasterMetadata;
 use rust_isolate::IsolateChannel;
 use crate::server::server_connection_factory::ServerConnectionFactory;
 use crate::server::server_connection::ServerConnection;
+use crate::ServerConfig;
+use std::collections::HashMap;
 
 /// This is common helper for running application state tests
 pub struct RelayTestHarness {
@@ -18,7 +20,10 @@ impl RelayTestHarness {
     /// Create a new test harness
     pub fn new() -> RelayTestHarness {
         RelayTestHarness {
-            factory: ServerConnectionFactory::new().unwrap(),
+            factory: ServerConnectionFactory::new(ServerConfig {
+                bind: "".to_string(),
+                secrets: HashMap::new(),
+            }).unwrap(),
             instance: None,
         }
     }
@@ -43,7 +48,7 @@ impl RelayTestHarness {
                 match r {
                     MasterEvent::External(er) => {
                         match er {
-                            MasterExternalEvent::TransactionResult { transaction_id:_, success, error } => {
+                            MasterExternalEvent::TransactionResult { transaction_id: _, success, error } => {
                                 assert!(success);
                                 assert!(error.is_none());
                             }
@@ -75,7 +80,7 @@ impl RelayTestHarness {
                     match r {
                         ClientEvent::External(er) => {
                             match er {
-                                ClientExternalEvent::TransactionResult { transaction_id:_, success, error: _ } => {
+                                ClientExternalEvent::TransactionResult { transaction_id: _, success, error: _ } => {
                                     assert!(success);
                                 }
                                 _ => unreachable!()
@@ -99,7 +104,7 @@ impl RelayTestHarness {
                     match r {
                         ClientEvent::External(er) => {
                             match er {
-                                ClientExternalEvent::TransactionResult { transaction_id:_, success, error } => {
+                                ClientExternalEvent::TransactionResult { transaction_id: _, success, error } => {
                                     assert!(success);
                                     assert!(error.is_none());
                                 }

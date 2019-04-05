@@ -7,6 +7,7 @@ use crossbeam::SendError;
 use relay_core::events::master_event::MasterEvent;
 use relay_core::events::client_event::ClientEvent;
 use relay_analytics::analytics_error::AnalyticsError;
+use relay_auth::AuthError;
 
 #[derive(Debug)]
 pub enum ServerError {
@@ -47,6 +48,12 @@ impl From<SendError<ClientEvent>> for ServerError {
 
 impl From<AnalyticsError> for ServerError {
     fn from(err: AnalyticsError) -> Self {
+        ServerError::Failed(err.description().to_string())
+    }
+}
+
+impl From<AuthError> for ServerError {
+    fn from(err: AuthError) -> Self {
         ServerError::Failed(err.description().to_string())
     }
 }

@@ -7,4 +7,7 @@ edition = "2018"
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-openssl = "0.10.19"
+relay-core = { path = "../relay-core" }
+relay-logging = { path = "../relay-logging" }
+sha2 = "0.8"
+chrono = "0.4"

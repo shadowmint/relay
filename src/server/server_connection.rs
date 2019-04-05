@@ -1,4 +1,4 @@
-use ws::Handler;
+use ws::{Handler, Handshake};
 use ws::Message;
 use ws::CloseCode;
 use ws;
@@ -16,6 +16,15 @@ use std::error::Error;
 use std::thread;
 use relay_logging::RelayLogger;
 use relay_analytics::analytics::Analytics;
+use relay_auth::AuthProvider;
+use chrono::Utc;
+use core::borrow::Borrow;
+use relay_auth::AuthResponse;
+
+#[derive(Clone)]
+pub struct ServerSession {
+    expires: i64
+}
 
 pub enum ServerEvent {
     Client(ClientEvent),
@@ -24,8 +33,9 @@ pub enum ServerEvent {
 
 pub enum ServerConnectionState {
     None,
-    Client(IsolateChannel<ClientEvent>),
-    Master(IsolateChannel<MasterEvent>),
+    Authorized(ServerSession),
+    Client { channel: IsolateChannel<ClientEvent>, session: ServerSession },
+    Master { channel: IsolateChannel<MasterEvent>, session: ServerSession },
 }
 
 impl ServerConnectionState {
@@ -35,9 +45,31 @@ impl ServerConnectionState {
             _ => false
         }
     }
+
+    /// Check if this request is authorized.
+    /// Returns an (authorized, is_expired) tuple.
+    pub fn is_authorized(&self) -> (bool, bool) {
+        match self {
+            ServerConnectionState::None => (false, false),
+            ServerConnectionState::Authorized(session) => {
+                (true, self.is_expired(session.expires))
+            }
+            ServerConnectionState::Client { channel: _, session } => {
+                (true, self.is_expired(session.expires))
+            }
+            ServerConnectionState::Master { channel: _, session } => {
+                (true, self.is_expired(session.expires))
+            }
+        }
+    }
+
+    fn is_expired(&self, expiry: i64) -> bool {
+        return Utc::now().timestamp() > expiry;
+    }
 }
 
 pub struct ServerConnection {
+    auth: AuthProvider,
     state: ServerConnectionState,
     output: Option<Sender>,
     logger: RelayLogger,
@@ -47,9 +79,12 @@ pub struct ServerConnection {
 }
 
 impl ServerConnection {
-    pub fn new(output: Option<Sender>, masters: IsolateRuntimeRef<MasterEvent>, clients: IsolateRuntimeRef<ClientEvent>, analytics: Analytics, logger: RelayLogger) -> ServerConnection {
+    pub fn new(output: Option<Sender>, masters: IsolateRuntimeRef<MasterEvent>,
+               clients: IsolateRuntimeRef<ClientEvent>, analytics: Analytics,
+               logger: RelayLogger, auth: AuthProvider) -> ServerConnection {
         ServerConnection {
             state: ServerConnectionState::None,
+            auth,
             analytics,
             output,
             masters,
@@ -60,55 +95,64 @@ impl ServerConnection {
 
     /// Try to guess the state from the message type
     fn pick_state_from(&mut self, message: &str) -> Result<(), ServerError> {
-        match serde_json::from_str::<MasterExternalEvent>(message) {
-            Ok(_) => {
-                self.become_master()?;
-                return Ok(());
+        match &self.state {
+            ServerConnectionState::Authorized(session) => {
+                match serde_json::from_str::<MasterExternalEvent>(message) {
+                    Ok(_) => {
+                        self.become_master(session.clone())?;
+                        return Ok(());
+                    }
+                    Err(_) => {}
+                }
+                match serde_json::from_str::<ClientExternalEvent>(message) {
+                    Ok(_) => {
+                        self.become_client(session.clone())?;
+                        return Ok(());
+                    }
+                    Err(_) => {}
+                }
+                self.logger.warn(format!("Invalid message: {}", message));
+                Ok(())
             }
-            Err(_) => {}
-        }
-        match serde_json::from_str::<ClientExternalEvent>(message) {
-            Ok(_) => {
-                self.become_client()?;
-                return Ok(());
+            _ => {
+                self.logger.warn(format!("Invalid state transition: source must be Authorized"));
+                Ok(())
             }
-            Err(_) => {}
         }
-        self.logger.warn(format!("Invalid message: {}", message));
-        Ok(())
     }
 
     /// Dispatch message based on type
     fn dispatch_message(&self, message: &str) -> Result<(), ServerError> {
         match &self.state {
-            ServerConnectionState::Master(channel) => {
+            ServerConnectionState::Master { channel, session: _ } => {
                 let message = serde_json::from_str::<MasterExternalEvent>(message)?;
                 channel.sender.send(MasterEvent::External(message))?;
             }
-            ServerConnectionState::Client(channel) => {
+            ServerConnectionState::Client { channel, session: _ } => {
                 let message = serde_json::from_str::<ClientExternalEvent>(message)?;
                 channel.sender.send(ClientEvent::External(message))?;
             }
             ServerConnectionState::None => {}
+            ServerConnectionState::Authorized(_) => {}
         }
         Ok(())
     }
 
     /// Become a master instance
-    fn become_master(&mut self) -> Result<(), ServerError> {
+    fn become_master(&mut self, session: ServerSession) -> Result<(), ServerError> {
         let channel = self.masters.spawn()?;
         self.spawn_master_reader(channel.clone().unwrap());
-        self.state = ServerConnectionState::Master(channel);
+        self.state = ServerConnectionState::Master { channel, session };
         self.analytics.track_event("master", 1);
         self.analytics.track_event("master_total", 1);
         Ok(())
     }
 
     /// Become a client instance
-    fn become_client(&mut self) -> Result<(), ServerError> {
+    fn become_client(&mut self, session: ServerSession) -> Result<(), ServerError> {
         let channel = self.clients.spawn()?;
         self.spawn_client_reader(channel.clone().unwrap());
-        self.state = ServerConnectionState::Client(channel);
+        self.state = ServerConnectionState::Client { channel, session };
         self.analytics.track_event("client", 1);
         self.analytics.track_event("client_total", 1);
         Ok(())
@@ -208,12 +252,83 @@ impl ServerConnection {
             }
         };
     }
+
+    fn try_authorize(&mut self, request: &str) -> AuthResponse {
+        self.auth.authorize(request)
+    }
+
+    /// Halt this socket connection
+    fn halt(&mut self) -> ws::Result<()> {
+        match self.output.as_mut() {
+            Some(ref m) => {
+                m.close(CloseCode::Normal)
+            }
+            None => {
+                Ok(())
+            }
+        }
+    }
+
+    /// Require authorization to continue
+    fn require_auth(&mut self, message: &str) -> ws::Result<()> {
+        let (authorized, auth_expired) = self.state.is_authorized();
+
+        // You must authorize before you can do anything.
+        if !authorized {
+            match self.try_authorize(&message) {
+                AuthResponse::Passed { event, expires } => {
+                    self.state = ServerConnectionState::Authorized(ServerSession { expires });
+                    match &self.output {
+                        Some(out) => {
+                            match serde_json::to_string(&event) {
+                                Ok(raw) => {
+                                    let _ = out.send(raw);
+                                }
+                                Err(_) => {}
+                            }
+                        }
+                        None => {}
+                    }
+                }
+                AuthResponse::Failed(event) => {
+                    self.logger.warn(format!("Auth failed: {:?}: {}", &event, message));
+                    match &self.output {
+                        Some(out) => {
+                            match serde_json::to_string(&event) {
+                                Ok(raw) => {
+                                    let _ = out.send(raw);
+                                }
+                                Err(_) => {}
+                            }
+                        }
+                        None => {}
+                    }
+                    return self.halt();
+                }
+            }
+        }
+
+        // Check token expiry
+        if auth_expired {
+            self.logger.warn(format!("Auth token expired: Discarded request: {}", message));
+            self.state = ServerConnectionState::None;
+            return self.halt();
+        }
+
+        Ok(())
+    }
 }
 
 impl Handler for ServerConnection {
     fn on_message(&mut self, msg: Message) -> ws::Result<()> {
         match msg {
             Message::Text(message) => {
+                let auth_result = self.require_auth(&message);
+                if auth_result.is_err() {
+                    return auth_result;
+                }
+
+                // Pick master / client mode
                 if self.state.is_none() {
                     match self.pick_state_from(&message) {
                         Ok(_) => {}
@@ -222,6 +337,8 @@ impl Handler for ServerConnection {
                         }
                     }
                 }
+
+                // Process real messages
                 match self.dispatch_message(&message) {
                     Ok(_) => {}
                     Err(e) => {
@@ -239,14 +356,15 @@ impl Handler for ServerConnection {
     fn on_close(&mut self, code: CloseCode, reason: &str) {
         let reason = format!("Connection closing due to ({:?}) {}", code, reason);
         match &self.state {
-            ServerConnectionState::Master(channel) => {
+            ServerConnectionState::Master { channel, session: _ } => {
                 self.send(channel, MasterEvent::Control(MasterDisconnected { reason }));
                 self.analytics.track_event("master", -1);
             }
-            ServerConnectionState::Client(channel) => {
+            ServerConnectionState::Client { channel, session: _ } => {
                 self.send(channel, ClientEvent::Control(ClientDisconnected { reason }));
                 self.analytics.track_event("client", -1);
             }
+            ServerConnectionState::Authorized(_) => {}
             ServerConnectionState::None => {}
         }
     }

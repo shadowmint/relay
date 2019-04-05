@@ -9,6 +9,7 @@ pub mod server_config;
 pub mod server_error;
 pub mod server_connection;
 pub mod server_connection_factory;
+pub mod server_auth;
 
 pub struct Server {}
 
@@ -19,7 +20,7 @@ impl Server {
 
     /// Run the server
     pub fn listen(&mut self, config: ServerConfig) -> Result<(), ServerError> {
-        let inner = ServerConnectionFactory::new()?;
+        let inner = ServerConnectionFactory::new(config.clone())?;
         let factory = Arc::new(Mutex::new(inner));
         listen(&config.bind, move |out| {
             match factory.lock() {

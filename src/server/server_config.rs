@@ -3,11 +3,15 @@ use std::path::Path;
 use std::fs;
 use crate::server::server_error::ServerError;
 use std::error::Error;
+use std::collections::HashMap;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ServerConfig {
     /// Bind to this address
-    pub bind: String
+    pub bind: String,
+
+    /// Set of key -> secret bindings
+    pub secrets: HashMap<String, String>,
 }
 
 impl ServerConfig {
