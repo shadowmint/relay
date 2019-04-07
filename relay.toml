@@ -1,6 +1,4 @@
 bind = "localhost:9977"
 
 [secrets]
-key1 = "secret1"
-key2 = "secret2"
-key3 = "secret3"
+key1234567890 = "secret1234567890"

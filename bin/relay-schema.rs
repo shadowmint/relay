@@ -8,8 +8,19 @@ use std::fmt::Debug;
 use relay_core::MASTER;
 use relay_core::events::master_event::MasterExternalEvent;
 use relay_core::model::master_metadata::MasterMetadata;
+use relay_auth::{AuthEvent, AuthRequest};
 
 fn main() {
+    // Sent by either client or master to auth a connection
+    trace("ALL", AuthEvent::Auth {
+        transaction_id: format!("1234"),
+        request: AuthRequest {
+            expires: 12312312312,
+            key: "public_key_1adfasdfasdf".to_string(),
+            hash: Some(format!("12312321312312321")),
+        },
+    });
+
     // Sent by the client application to initialize a new session
     trace(CLIENT, ClientExternalEvent::InitializeClient {
         transaction_id: format!("123"),

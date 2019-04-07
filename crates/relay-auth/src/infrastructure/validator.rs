@@ -19,21 +19,21 @@ impl AuthValidator {
 
     /// Validate a request.
     /// The response is Ok(()) or a error with a reason
-    pub fn validate(&self, request: AuthRequest, config: &AuthProviderConfig) -> Result<(), AuthError> {
-        self.validate_hash(&request, config)?;
-        self.validate_transaction_id(&request, config)?;
+    pub fn validate(&self, transaction_id: &str, request: AuthRequest, config: &AuthProviderConfig) -> Result<(), AuthError> {
+        self.validate_hash(transaction_id, &request, config)?;
+        self.validate_transaction_id(transaction_id, config)?;
         self.validate_expires(&request, config)?;
         self.validate_key(&request, config)?;
         Ok(())
     }
 
-    fn validate_hash(&self, request: &AuthRequest, config: &AuthProviderConfig) -> Result<(), AuthError> {
-        self.hasher.validate(request, config.secret_store.as_ref())?;
+    fn validate_hash(&self, transaction_id: &str, request: &AuthRequest, config: &AuthProviderConfig) -> Result<(), AuthError> {
+        self.hasher.validate(transaction_id, request, config.secret_store.as_ref())?;
         Ok(())
     }
 
-    fn validate_transaction_id(&self, request: &AuthRequest, config: &AuthProviderConfig) -> Result<(), AuthError> {
-        if request.transaction_id.len() < config.min_transaction_id_length {
+    fn validate_transaction_id(&self, transaction_id: &str, config: &AuthProviderConfig) -> Result<(), AuthError> {
+        if transaction_id.len() < config.min_transaction_id_length {
             return Err(AuthError::InvalidTransactionId);
         }
         Ok(())
@@ -49,7 +49,7 @@ impl AuthValidator {
     }
 
     fn validate_key(&self, request: &AuthRequest, config: &AuthProviderConfig) -> Result<(), AuthError> {
-        if request.transaction_id.len() < config.min_key_length {
+        if request.key.len() < config.min_key_length {
             return Err(AuthError::InvalidKey);
         }
         Ok(())
@@ -63,7 +63,7 @@ mod tests {
     use chrono::Utc;
     use crate::events::auth_event::AuthRequest;
     use crate::infrastructure::hasher::AuthHasher;
-    use crate::{AuthError};
+    use crate::AuthError;
     use crate::infrastructure::validator::AuthValidator;
 
     #[test]
@@ -75,21 +75,20 @@ mod tests {
         let expires = Utc::now().timestamp() + 3600;
 
         let mut request = AuthRequest {
-            transaction_id: "32dfjadkjladskladfadfasdf".to_string(),
             key: "12321321321".to_string(),
             expires,
             hash: None,
         };
 
         // Sign request
-        request.hash = Some(AuthHasher::new().hash(&request, &mut secrets).unwrap());
+        request.hash = Some(AuthHasher::new().hash("32dfjadkjladskladfadfasdf", &request, &mut secrets).unwrap());
 
         // Execute
         let mut config = MockAuthProviderConfig::mock_config_with_store(secrets);
         let validator = AuthValidator::new();
 
         // Assert
-        assert!(validator.validate(request, &mut config).is_ok());
+        assert!(validator.validate("32dfjadkjladskladfadfasdf", request, &mut config).is_ok());
     }
 
     #[test]
@@ -103,21 +102,20 @@ mod tests {
         let expires = Utc::now().timestamp() + 3600;
 
         let mut request = AuthRequest {
-            transaction_id: "32dfjadkjladskladfadfasdf".to_string(),
             key: "12321321321".to_string(),
             expires,
             hash: None,
         };
 
         // Sign request
-        request.hash = Some(AuthHasher::new().hash(&request, &mut secrets_wrong).unwrap());
+        request.hash = Some(AuthHasher::new().hash("32dfjadkjladskladfadfasdf", &request, &mut secrets_wrong).unwrap());
 
         // Execute
         let mut config = MockAuthProviderConfig::mock_config_with_store(secrets);
         let validator = AuthValidator::new();
 
         // Assert
-        match validator.validate(request, &mut config) {
+        match validator.validate("32dfjadkjladskladfadfasdf", request, &mut config) {
             Ok(_) => unreachable!(),
             Err(e) => {
                 match e {

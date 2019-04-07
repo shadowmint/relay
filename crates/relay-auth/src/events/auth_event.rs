@@ -5,7 +5,7 @@ use relay_core::model::external_error::ExternalError;
 #[serde(tag = "object_type")]
 pub enum AuthEvent {
     /// Login request
-    Auth { request: AuthRequest },
+    Auth { transaction_id: String, request: AuthRequest },
 
     /// Sent by the application to notify about transaction result
     TransactionResult { transaction_id: String, success: bool, error: Option<ExternalError> },
@@ -14,9 +14,6 @@ pub enum AuthEvent {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "object_type")]
 pub struct AuthRequest {
-    /// The transaction id to respond to the client with
-    pub transaction_id: String,
-
     /// When this auth session will expire, it must be in the future and within the required
     /// configuration bounds for the auth provider.
     pub expires: i64,

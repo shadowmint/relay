@@ -5,18 +5,13 @@ pub(crate) mod infrastructure;
 pub(crate) mod auth_provider;
 pub(crate) mod auth_provider_config;
 
-pub use auth_provider_config::AuthProviderConfig;
-pub use auth_provider::AuthProvider;
-pub use auth_provider::AuthResponse;
+pub use crate::auth_provider_config::AuthProviderConfig;
+pub use crate::auth_provider::AuthProvider;
+pub use crate::auth_provider::AuthResponse;
 
-pub use auth_secret_provider::AuthSecretProvider;
+pub use crate::events::auth_event::AuthEvent;
+pub use crate::events::auth_event::AuthRequest;
 
-pub use errors::AuthError;
+pub use crate::auth_secret_provider::AuthSecretProvider;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+pub use crate::errors::AuthError;

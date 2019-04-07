@@ -47,11 +47,12 @@ impl AuthProvider {
     /// If 'should keep connection' is false,
     fn process_authorize_request(&self, request: AuthEvent) -> AuthResponse {
         match request {
-            AuthEvent::Auth { request } => {
-                let transaction_id = request.transaction_id.clone();
+            AuthEvent::Auth { request, transaction_id } => {
                 let expires = request.expires;
-                match self.validator.validate(request, &self.config) {
+                let key = request.key.clone();
+                match self.validator.validate(&transaction_id.to_string(), request, &self.config) {
                     Ok(_) => {
+                        self.logger.info(format!("Auth success: {}: key {}, expires: {}", transaction_id, key, expires));
                         AuthResponse::Passed {
                             expires,
                             event: AuthEvent::TransactionResult {
@@ -85,7 +86,7 @@ impl AuthProvider {
 
 #[cfg(test)]
 mod tests {
-    use crate::infrastructure::mocks::{MockAuthProviderConfig};
+    use crate::infrastructure::mocks::MockAuthProviderConfig;
     use crate::AuthProvider;
     use crate::auth_provider::AuthResponse;
     use crate::events::auth_event::{AuthEvent, AuthRequest};
@@ -110,12 +111,12 @@ mod tests {
 
         // Bad hash
         let request = serde_json::to_string(&AuthEvent::Auth {
+            transaction_id: "123".to_string(),
             request: AuthRequest {
-                transaction_id: "123".to_string(),
                 expires: 123213,
                 key: "12323".to_string(),
                 hash: None,
-            }
+            },
         }).unwrap();
         match auth.authorize(&request) {
             AuthResponse::Failed(_) => {}
@@ -131,15 +132,14 @@ mod tests {
 
         // Build a valid hash
         let mut request = AuthRequest {
-            transaction_id: "12345678910".to_string(),
             expires: Utc::now().timestamp() + 1600,
             key: "12345678".to_string(),
             hash: None,
         };
-        request.hash = Some(AuthHasher::new().hash(&request, mocks.secret_store.as_mut()).unwrap());
+        request.hash = Some(AuthHasher::new().hash("1234567890", &request, mocks.secret_store.as_mut()).unwrap());
 
         // Build a valid request
-        let event = AuthEvent::Auth { request };
+        let event = AuthEvent::Auth { request, transaction_id: "1234567890".to_string() };
         let raw_event = serde_json::to_string(&event).unwrap();
 
         // Setup auth provider and check the request
@@ -151,7 +151,7 @@ mod tests {
                         assert!(success);
                         assert!(error.is_none());
                         assert!(expires > Utc::now().timestamp());
-                        assert_eq!(transaction_id, "12345678910");
+                        assert_eq!(transaction_id, "1234567890");
                     }
                     _ => unreachable!()
                 }

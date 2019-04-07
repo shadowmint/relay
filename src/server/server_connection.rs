@@ -1,4 +1,4 @@
-use ws::{Handler, Handshake};
+use ws::Handler;
 use ws::Message;
 use ws::CloseCode;
 use ws;
@@ -18,7 +18,6 @@ use relay_logging::RelayLogger;
 use relay_analytics::analytics::Analytics;
 use relay_auth::AuthProvider;
 use chrono::Utc;
-use core::borrow::Borrow;
 use relay_auth::AuthResponse;
 
 #[derive(Clone)]
@@ -39,9 +38,9 @@ pub enum ServerConnectionState {
 }
 
 impl ServerConnectionState {
-    pub fn is_none(&self) -> bool {
+    pub fn is_unresolved(&self) -> bool {
         match self {
-            ServerConnectionState::None => true,
+            ServerConnectionState::Authorized(_) => true,
             _ => false
         }
     }
@@ -270,19 +269,22 @@ impl ServerConnection {
     }
 
     /// Require authorization to continue
-    fn require_auth(&mut self, message: &str) -> ws::Result<()> {
+    /// Returns (result, end_request_early)
+    fn require_auth(&mut self, message: &str) -> (ws::Result<()>, bool) {
         let (authorized, auth_expired) = self.state.is_authorized();
 
         // You must authorize before you can do anything.
         if !authorized {
             match self.try_authorize(&message) {
                 AuthResponse::Passed { event, expires } => {
+                    self.logger.info(format!("Authorization success"));
                     self.state = ServerConnectionState::Authorized(ServerSession { expires });
                     match &self.output {
                         Some(out) => {
                             match serde_json::to_string(&event) {
                                 Ok(raw) => {
                                     let _ = out.send(raw);
+                                    return (Ok(()), true);
                                 }
                                 Err(_) => {}
                             }
@@ -303,7 +305,7 @@ impl ServerConnection {
                         }
                         None => {}
                     }
-                    return self.halt();
+                    return (self.halt(), true);
                 }
             }
         }
@@ -312,10 +314,10 @@ impl ServerConnection {
         if auth_expired {
             self.logger.warn(format!("Auth token expired: Discarded request: {}", message));
             self.state = ServerConnectionState::None;
-            return self.halt();
+            return (self.halt(), true);
         }
 
-        Ok(())
+        (Ok(()), false)
     }
 }
 
@@ -323,13 +325,13 @@ impl Handler for ServerConnection {
     fn on_message(&mut self, msg: Message) -> ws::Result<()> {
         match msg {
             Message::Text(message) => {
-                let auth_result = self.require_auth(&message);
-                if auth_result.is_err() {
+                let (auth_result, end_request_early) = self.require_auth(&message);
+                if end_request_early {
                     return auth_result;
                 }
 
                 // Pick master / client mode
-                if self.state.is_none() {
+                if self.state.is_unresolved() {
                     match self.pick_state_from(&message) {
                         Ok(_) => {}
                         Err(e) => {
