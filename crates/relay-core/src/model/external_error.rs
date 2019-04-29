@@ -1,5 +1,5 @@
-use serde::{Serialize, Deserialize};
 use crate::infrastructure::services::SessionManagerError;
+use serde::{Deserialize, Serialize};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum ErrorCode {
@@ -13,10 +13,12 @@ pub enum ErrorCode {
     ClientNotConnected,
     NotActive,
     AuthFailed,
+    SyncError,
+    Unknown,
 }
 
 /// For sending external errors
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExternalError {
     pub error_code: i32,
     pub error_reason: String,
@@ -33,10 +35,12 @@ impl From<ErrorCode> for ExternalError {
                 ErrorCode::ClientLimitExceeded => "Too many connected clients, no free slots",
                 ErrorCode::NoMatchingClientId => "No client found matching the requested id",
                 ErrorCode::InvalidClientIdentityToken => "The client identity was malformed",
-                ErrorCode::ClientNotConnected => "No active connection to a master exists yet for this client",
+                ErrorCode::ClientNotConnected => "No active connection exists yet for this client",
                 ErrorCode::NotActive => "The specific target is not active",
+                ErrorCode::SyncError => "Synchronization error resolving future",
                 _ => "Internal error",
-            }.to_string(),
+            }
+            .to_string(),
         }
     }
 }

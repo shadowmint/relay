@@ -1,4 +1,4 @@
-bind = "localhost:9977"
+bind = "127.0.0.1:9977"
 
 [secrets]
 key1234567890 = "secret1234567890"
