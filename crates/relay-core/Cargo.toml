@@ -5,7 +5,7 @@ authors = ["Douglas Linder <linderd@iinet.net.au>"]
 edition = "2018"
 
 [dependencies]
-rust-isolate = {  git = "https://github.com/shadowmint/rust-isolate", branch = "master"}
+rust-isolate = {  git = "https://github.com/shadowmint/rust-isolate", tag = "0.2.0"}
 base-logging = {  git = "https://github.com/shadowmint/rust-base-logging", branch = "master"}
 relay-logging = { path = "../relay-logging" }
 relay-analytics = { path = "../relay-analytics" }

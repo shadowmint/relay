@@ -15,7 +15,7 @@ path = "bin/echo-client.rs"
 [dependencies]
 relay-core = { path = "../relay-core" }
 relay-auth = { path = "../relay-auth" }
-ws = "0.8"
+ws = "0.9"
 getopts = "0.2"
 crossbeam = "0.7.1"
 futures = "0.1"

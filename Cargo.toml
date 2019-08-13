@@ -18,13 +18,13 @@ path = "bin/relay-schema.rs"
 
 [dependencies]
 toml = "0.4"
-ws = "0.7"
+ws = "0.9"
 getopts = "0.2"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 crossbeam = "0.7.1"
 chrono = "0.4"
-rust-isolate = {  git = "https://github.com/shadowmint/rust-isolate", branch = "master"}
+rust-isolate = {  git = "https://github.com/shadowmint/rust-isolate", tag = "0.2.0"}
 relay-core = { path = "crates/relay-core" }
 relay-logging = { path = "crates/relay-logging" }
 relay-analytics = { path = "crates/relay-analytics" }

@@ -1,20 +1,20 @@
 mod master_state;
 
-use rust_isolate::Isolate;
-use rust_isolate::IsolateIdentity;
-use rust_isolate::IsolateChannel;
 use crate::events::client_event::ClientEvent;
-use crate::events::master_event::MasterEvent;
-use relay_logging::RelayEventLogger;
-use crate::events::master_event::MasterExternalEvent;
-use crate::infrastructure::services::SessionManager;
+use crate::events::client_event::ClientInternalEvent;
 use crate::events::master_event::MasterControlEvent;
+use crate::events::master_event::MasterEvent;
+use crate::events::master_event::MasterExternalEvent;
+use crate::events::master_event::MasterInternalEvent;
+use crate::infrastructure::services::SessionManager;
 use crate::isolates::master::master_state::MasterState;
 use crate::isolates::master::MasterEventDispatch::DispatchExternal;
-use crate::events::master_event::MasterInternalEvent;
-use crate::events::client_event::ClientInternalEvent;
-use crate::{MASTER, NO_IDENTITY};
 use crate::isolates::master::MasterEventDispatch::DispatchToClient;
+use crate::{MASTER, NO_IDENTITY};
+use relay_logging::RelayEventLogger;
+use rust_isolate::Isolate;
+use rust_isolate::IsolateChannel;
+use rust_isolate::IsolateIdentity;
 use std::error::Error;
 
 #[derive(Debug)]
@@ -40,50 +40,76 @@ impl MasterIsolate {
         }
     }
 
-    pub fn instance(&self, identity: IsolateIdentity, channel: &IsolateChannel<MasterEvent>) -> MasterIsolate {
+    pub fn instance(
+        &self,
+        identity: IsolateIdentity,
+        channel: &IsolateChannel<MasterEvent>,
+    ) -> MasterIsolate {
         let logger = RelayEventLogger::new(&identity.to_string(), MASTER);
         MasterIsolate {
             state: self.state.instance(identity, logger.clone()),
             logger,
-            external: Some(channel.clone().unwrap()),
+            external: Some(channel.clone()),
         }
     }
 
     pub fn dispatch(&mut self, event: MasterEvent) -> Result<(), ()> {
         self.logger.incoming_event(&event);
         match event {
-            MasterEvent::External(e) => {
-                match e {
-                    MasterExternalEvent::InitializeMaster { transaction_id, metadata } => {
-                        let response = self.state.external_initialize(transaction_id, metadata);
-                        self.send(response);
-                    }
-                    MasterExternalEvent::MessageToClient { client_id, transaction_id, data } => {
-                        let response = self.state.external_message_to_client(client_id, transaction_id, data);
-                        self.send_many(response);
-                    }
+            MasterEvent::External(e) => match e {
+                MasterExternalEvent::InitializeMaster {
+                    transaction_id,
+                    metadata,
+                } => {
+                    let response = self.state.external_initialize(transaction_id, metadata);
+                    self.send(response);
+                }
+                MasterExternalEvent::MessageToClient {
+                    client_id,
+                    transaction_id,
+                    data,
+                } => {
+                    let response =
+                        self.state
+                            .external_message_to_client(client_id, transaction_id, data);
+                    self.send_many(response);
+                }
 
-                    _ => {
-                        self.logger.warn(format!("Dispatch failed to process unknown message: {:?}", e));
-                    }
+                _ => {
+                    self.logger.warn(format!(
+                        "Dispatch failed to process unknown message: {:?}",
+                        e
+                    ));
                 }
-            }
-            MasterEvent::Internal(e) => {
-                match e {
-                    MasterInternalEvent::ClientJoinRequest { transaction_id, client_id, identity } => {
-                        let response = self.state.internal_client_join_request(&client_id, transaction_id, identity);
-                        self.send_many(response);
-                    }
-                    MasterInternalEvent::MessageFromClient { client_id, transaction_id, data } => {
-                        let response = self.state.internal_client_message(client_id, transaction_id, data);
-                        self.send_many(response);
-                    }
-                    MasterInternalEvent::ClientDisconnected { identity, reason } => {
-                        let response = self.state.internal_client_disconnected(identity, &reason);
-                        self.send(response);
-                    }
+            },
+            MasterEvent::Internal(e) => match e {
+                MasterInternalEvent::ClientJoinRequest {
+                    transaction_id,
+                    client_id,
+                    identity,
+                } => {
+                    let response = self.state.internal_client_join_request(
+                        &client_id,
+                        transaction_id,
+                        identity,
+                    );
+                    self.send_many(response);
                 }
-            }
+                MasterInternalEvent::MessageFromClient {
+                    client_id,
+                    transaction_id,
+                    data,
+                } => {
+                    let response =
+                        self.state
+                            .internal_client_message(client_id, transaction_id, data);
+                    self.send_many(response);
+                }
+                MasterInternalEvent::ClientDisconnected { identity, reason } => {
+                    let response = self.state.internal_client_disconnected(identity, &reason);
+                    self.send(response);
+                }
+            },
             MasterEvent::Control(e) => {
                 match e {
                     MasterControlEvent::Halt => return Err(()),
@@ -101,7 +127,9 @@ impl MasterIsolate {
     pub fn event_loop(&mut self, channel: &IsolateChannel<MasterEvent>) -> Result<(), ()> {
         loop {
             match channel.receiver.recv() {
-                Ok(event) => { self.dispatch(event)?; }
+                Ok(event) => {
+                    self.dispatch(event)?;
+                }
                 Err(_err) => {
                     self.logger.warn("Channel closed, halting isolate");
                     return Err(());
@@ -143,7 +171,11 @@ impl MasterIsolate {
                 match client_channel.sender.send(output) {
                     Ok(_) => {}
                     Err(e) => {
-                        self.logger.warn(format!("Failed to send event to {:?}: {}", identity, e.description()));
+                        self.logger.warn(format!(
+                            "Failed to send event to {:?}: {}",
+                            identity,
+                            e.description()
+                        ));
                     }
                 }
             }
@@ -156,12 +188,19 @@ impl MasterIsolate {
                         match client_channel.sender.send(output) {
                             Ok(_) => {}
                             Err(e) => {
-                                self.logger.warn(format!("Failed to send event to {:?}: {}", identity, e.description()));
+                                self.logger.warn(format!(
+                                    "Failed to send event to {:?}: {}",
+                                    identity,
+                                    e.description()
+                                ));
                             }
                         }
                     }
                     None => {
-                        self.logger.warn(format!("Unable to send event to unknown client {:?}: {:?}", identity, output));
+                        self.logger.warn(format!(
+                            "Unable to send event to unknown client {:?}: {:?}",
+                            identity, output
+                        ));
                     }
                 }
             }
@@ -170,7 +209,11 @@ impl MasterIsolate {
 }
 
 impl Isolate<MasterEvent> for MasterIsolate {
-    fn spawn(&self, identity: IsolateIdentity, channel: IsolateChannel<MasterEvent>) -> Box<FnMut() + Send + 'static> {
+    fn spawn(
+        &self,
+        identity: IsolateIdentity,
+        channel: IsolateChannel<MasterEvent>,
+    ) -> Box<FnMut() + Send + 'static> {
         let mut instance = self.instance(identity, &channel);
         Box::new(move || {
             let _ = instance.event_loop(&channel);

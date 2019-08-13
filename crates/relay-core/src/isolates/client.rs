@@ -1,21 +1,21 @@
 mod client_state;
 
-use rust_isolate::Isolate;
-use rust_isolate::IsolateIdentity;
-use rust_isolate::IsolateChannel;
+use crate::events::client_event::ClientControlEvent;
 use crate::events::client_event::ClientEvent;
-use relay_logging::RelayEventLogger;
+use crate::events::client_event::ClientExternalEvent;
+use crate::events::client_event::ClientInternalEvent;
+use crate::events::master_event::MasterEvent;
+use crate::events::master_event::MasterInternalEvent;
 use crate::infrastructure::services::SessionManager;
 use crate::isolates::client::client_state::ClientState;
-use crate::events::client_event::ClientExternalEvent;
-use crate::events::client_event::ClientControlEvent;
 use crate::isolates::client::ClientEventDispatch::DispatchExternal;
-use crate::events::client_event::ClientInternalEvent;
-use crate::events::master_event::MasterInternalEvent;
-use crate::events::master_event::MasterEvent;
-use crate::{CLIENT, NO_IDENTITY};
-use std::error::Error;
 use crate::isolates::client::ClientEventDispatch::DispatchInternal;
+use crate::{CLIENT, NO_IDENTITY};
+use relay_logging::RelayEventLogger;
+use rust_isolate::Isolate;
+use rust_isolate::IsolateChannel;
+use rust_isolate::IsolateIdentity;
+use std::error::Error;
 
 #[derive(Debug)]
 pub enum ClientEventDispatch {
@@ -39,70 +39,93 @@ impl ClientIsolate {
         }
     }
 
-    pub fn instance(&self, identity: IsolateIdentity, channel: &IsolateChannel<ClientEvent>) -> ClientIsolate {
+    pub fn instance(
+        &self,
+        identity: IsolateIdentity,
+        channel: &IsolateChannel<ClientEvent>,
+    ) -> ClientIsolate {
         ClientIsolate {
             state: self.state.instance(identity),
             logger: RelayEventLogger::new(&identity.to_string(), CLIENT),
-            external: Some(channel.clone().unwrap()),
+            external: Some(channel.clone()),
         }
     }
 
     pub fn dispatch(&mut self, event: ClientEvent) -> Result<(), ()> {
         self.logger.incoming_event(&event);
         match event {
-            ClientEvent::External(e) => {
-                match e {
-                    ClientExternalEvent::InitializeClient { transaction_id, metadata } => {
-                        let response = self.state.external_initialize(transaction_id, metadata);
-                        self.send(response);
-                    }
-                    ClientExternalEvent::Join { transaction_id, session_id } => {
-                        let response = self.state.external_join(transaction_id, &session_id);
-                        self.send(response);
-                    }
-                    ClientExternalEvent::MessageFromClient { transaction_id, data } => {
-                        let response = self.state.external_message(transaction_id, data);
-                        self.send(response);
-                    }
+            ClientEvent::External(e) => match e {
+                ClientExternalEvent::InitializeClient {
+                    transaction_id,
+                    metadata,
+                } => {
+                    let response = self.state.external_initialize(transaction_id, metadata);
+                    self.send(response);
+                }
+                ClientExternalEvent::Join {
+                    transaction_id,
+                    session_id,
+                } => {
+                    let response = self.state.external_join(transaction_id, &session_id);
+                    self.send(response);
+                }
+                ClientExternalEvent::MessageFromClient {
+                    transaction_id,
+                    data,
+                } => {
+                    let response = self.state.external_message(transaction_id, data);
+                    self.send(response);
+                }
 
-                    _ => {
-                        self.logger.warn(format!("Dispatch failed to process unknown message: {:?}", e));
-                    }
+                _ => {
+                    self.logger.warn(format!(
+                        "Dispatch failed to process unknown message: {:?}",
+                        e
+                    ));
                 }
-            }
-            ClientEvent::Internal(e) => {
-                match e {
-                    ClientInternalEvent::ClientJoinResponse { transaction_id, success, error } => {
-                        let response = self.state.internal_join_response(transaction_id, success, error);
-                        self.send(response);
-                    }
-                    ClientInternalEvent::MessageFromClientResponse { transaction_id, success, error } => {
-                        let response = self.state.internal_message_response(transaction_id, success, error);
-                        self.send(response);
-                    }
-                    ClientInternalEvent::MessageFromMaster { data } => {
-                        let response = self.state.internal_message_from_master(data);
-                        self.send(response);
-                    }
-                    ClientInternalEvent::MasterDisconnected { reason } => {
-                        let response = self.state.internal_master_disconnect(&reason);
-                        self.send(response);
-                        self.logger.warn(format!("Disconnected: Master disconnected: {}", reason));
-                        return Err(());
-                    }
+            },
+            ClientEvent::Internal(e) => match e {
+                ClientInternalEvent::ClientJoinResponse {
+                    transaction_id,
+                    success,
+                    error,
+                } => {
+                    let response =
+                        self.state
+                            .internal_join_response(transaction_id, success, error);
+                    self.send(response);
                 }
-            }
-            ClientEvent::Control(e) => {
-                match e {
-                    ClientControlEvent::Halt => return Err(()),
-                    ClientControlEvent::ClientDisconnected { reason } => {
-                        let response = self.state.external_disconnect(&reason);
-                        self.send(response);
-                        self.logger.warn(format!("Disconnected: {}", reason));
-                        return Err(());
-                    }
+                ClientInternalEvent::MessageFromClientResponse {
+                    transaction_id,
+                    success,
+                    error,
+                } => {
+                    let response =
+                        self.state
+                            .internal_message_response(transaction_id, success, error);
+                    self.send(response);
                 }
-            }
+                ClientInternalEvent::MessageFromMaster { data } => {
+                    let response = self.state.internal_message_from_master(data);
+                    self.send(response);
+                }
+                ClientInternalEvent::MasterDisconnected { reason } => {
+                    let response = self.state.internal_master_disconnect(&reason);
+                    self.send(response);
+                    self.logger
+                        .warn(format!("Disconnected: Master disconnected: {}", reason));
+                    return Err(());
+                }
+            },
+            ClientEvent::Control(e) => match e {
+                ClientControlEvent::Halt => return Err(()),
+                ClientControlEvent::ClientDisconnected { reason } => {
+                    let response = self.state.external_disconnect(&reason);
+                    self.send(response);
+                    self.logger.warn(format!("Disconnected: {}", reason));
+                    return Err(());
+                }
+            },
         }
         Ok(())
     }
@@ -110,7 +133,9 @@ impl ClientIsolate {
     pub fn event_loop(&mut self, channel: &IsolateChannel<ClientEvent>) -> Result<(), ()> {
         loop {
             match channel.receiver.recv() {
-                Ok(event) => { self.dispatch(event)?; }
+                Ok(event) => {
+                    self.dispatch(event)?;
+                }
                 Err(_err) => {
                     self.logger.warn("Channel closed, halting isolate");
                     return Err(());
@@ -147,7 +172,10 @@ impl ClientIsolate {
                 match channel.sender.send(output) {
                     Ok(_) => {}
                     Err(e) => {
-                        self.logger.warn(format!("Failed to send internal event: {}", e.description()));
+                        self.logger.warn(format!(
+                            "Failed to send internal event: {}",
+                            e.description()
+                        ));
                     }
                 }
             }
@@ -159,7 +187,11 @@ impl ClientIsolate {
 }
 
 impl Isolate<ClientEvent> for ClientIsolate {
-    fn spawn(&self, identity: IsolateIdentity, channel: IsolateChannel<ClientEvent>) -> Box<FnMut() + Send + 'static> {
+    fn spawn(
+        &self,
+        identity: IsolateIdentity,
+        channel: IsolateChannel<ClientEvent>,
+    ) -> Box<FnMut() + Send + 'static> {
         let mut instance = self.instance(identity, &channel);
         Box::new(move || {
             let _ = instance.event_loop(&channel);
