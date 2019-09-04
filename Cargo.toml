@@ -24,6 +24,7 @@ serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 crossbeam = "0.7.1"
 chrono = "0.4"
+data-encoding = "2.1.2"
 rust-isolate = {  git = "https://github.com/shadowmint/rust-isolate", tag = "0.2.0"}
 relay-core = { path = "crates/relay-core" }
 relay-logging = { path = "crates/relay-logging" }

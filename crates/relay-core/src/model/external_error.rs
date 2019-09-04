@@ -1,5 +1,8 @@
 use crate::infrastructure::services::SessionManagerError;
 use serde::{Deserialize, Serialize};
+use std::error::Error;
+use std::fmt;
+use std::fmt::Display;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum ErrorCode {
@@ -13,6 +16,7 @@ pub enum ErrorCode {
     ClientNotConnected,
     NotActive,
     AuthFailed,
+    InvalidRequest,
     SyncError,
     Unknown,
 }
@@ -22,6 +26,14 @@ pub enum ErrorCode {
 pub struct ExternalError {
     pub error_code: i32,
     pub error_reason: String,
+}
+
+impl Error for ExternalError {}
+
+impl Display for ExternalError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl From<ErrorCode> for ExternalError {
@@ -37,8 +49,11 @@ impl From<ErrorCode> for ExternalError {
                 ErrorCode::InvalidClientIdentityToken => "The client identity was malformed",
                 ErrorCode::ClientNotConnected => "No active connection exists yet for this client",
                 ErrorCode::NotActive => "The specific target is not active",
+                ErrorCode::InvalidRequest => "An invalid request was made and rejected",
                 ErrorCode::SyncError => "Synchronization error resolving future",
-                _ => "Internal error",
+                ErrorCode::ArcMutexFailure => "Mutex error",
+                ErrorCode::AuthFailed => "Internal error",
+                ErrorCode::Unknown => "Internal error",
             }
             .to_string(),
         }
@@ -49,9 +64,15 @@ impl From<SessionManagerError> for ExternalError {
     fn from(e: SessionManagerError) -> Self {
         return match e {
             SessionManagerError::MutexSyncError => ExternalError::from(ErrorCode::ArcMutexFailure),
-            SessionManagerError::NameAlreadyInUse => ExternalError::from(ErrorCode::MasterIdConflict),
-            SessionManagerError::NoMatchingMaster => ExternalError::from(ErrorCode::NoMatchingMasterId),
-            SessionManagerError::NoMatchingClient => ExternalError::from(ErrorCode::NoMatchingClientId),
+            SessionManagerError::NameAlreadyInUse => {
+                ExternalError::from(ErrorCode::MasterIdConflict)
+            }
+            SessionManagerError::NoMatchingMaster => {
+                ExternalError::from(ErrorCode::NoMatchingMasterId)
+            }
+            SessionManagerError::NoMatchingClient => {
+                ExternalError::from(ErrorCode::NoMatchingClientId)
+            }
         };
     }
 }

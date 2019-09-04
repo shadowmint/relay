@@ -7,7 +7,7 @@ use std::error::Error;
 use std::fmt;
 use std::sync::{MutexGuard, PoisonError};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RelayError {
     InternalError(String),
     ConnectionFailed(String),

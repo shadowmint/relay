@@ -7,6 +7,7 @@ use crate::infrastructure::transaction_manager::TransactionManager;
 use crossbeam::crossbeam_channel;
 use futures::future::Either;
 use futures::Future;
+use relay_auth::AuthEvent;
 
 pub(crate) mod mock_backend;
 pub(crate) mod websocket_backend;
@@ -24,6 +25,7 @@ pub struct Backend {
 }
 
 pub struct BackendOptions {
+    pub auth: Result<AuthEvent, RelayError>,
     pub target: BackendType,
     pub remote: String,
     pub transaction_manager: TransactionManager,
@@ -35,18 +37,20 @@ impl Backend {
         let (sx, rx) = crossbeam_channel::unbounded();
         let promise = match options.target {
             BackendType::Mock => Either::A(MockBackend::new(options.transaction_manager.clone(), true)),
-            BackendType::WebSocket => Either::B(WebSocketBackend::new(&options.remote, options.transaction_manager.clone(), sx)),
+            BackendType::WebSocket => Either::B(WebSocketBackend::new(
+                &options.remote,
+                options.transaction_manager.clone(),
+                sx,
+                options.auth.clone(),
+            )),
         };
-        return promise.then(move |r| {
-            println!("Resolver resolved: ok: {}", r.is_ok());
-            match r {
-                Ok(handler) => Ok(Backend {
-                    channel: rx,
-                    target: options.target,
-                    connection: ManagedConnection::new(handler, options.transaction_manager.clone()),
-                }),
-                Err(e) => Err(e),
-            }
+        return promise.then(move |r| match r {
+            Ok(handler) => Ok(Backend {
+                channel: rx,
+                target: options.target,
+                connection: ManagedConnection::new(handler, options.transaction_manager.clone()),
+            }),
+            Err(e) => Err(e),
         });
     }
 

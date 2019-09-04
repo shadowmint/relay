@@ -1,5 +1,6 @@
 use crate::server::server_error::ServerError;
 use chrono::Utc;
+use data_encoding::BASE64;
 use relay_analytics::analytics::Analytics;
 use relay_auth::AuthProvider;
 use relay_auth::AuthResponse;
@@ -9,11 +10,13 @@ use relay_core::events::client_event::ClientExternalEvent;
 use relay_core::events::master_event::MasterControlEvent::MasterDisconnected;
 use relay_core::events::master_event::MasterEvent;
 use relay_core::events::master_event::MasterExternalEvent;
+use relay_core::model::external_error::{ErrorCode, ExternalError};
 use relay_logging::RelayLogger;
 use rust_isolate::IsolateChannel;
 use rust_isolate::IsolateRuntimeRef;
 use std::error::Error;
-use std::thread;
+use std::str::from_utf8;
+use std::{mem, thread};
 use ws;
 use ws::CloseCode;
 use ws::Handler;
@@ -105,7 +108,10 @@ impl ServerConnection {
 
     /// Try to guess the state from the message type
     fn pick_state_from(&mut self, message: &str) -> Result<(), ServerError> {
-        match &self.state {
+        let mut state = ServerConnectionState::None;
+        mem::swap(&mut state, &mut self.state);
+
+        match &state {
             ServerConnectionState::Authorized(session) => {
                 match serde_json::from_str::<MasterExternalEvent>(message) {
                     Ok(_) => {
@@ -122,15 +128,17 @@ impl ServerConnection {
                     Err(_) => {}
                 }
                 self.logger.warn(format!("Invalid message: {}", message));
-                Ok(())
             }
             _ => {
                 self.logger.warn(format!(
                     "Invalid state transition: source must be Authorized"
                 ));
-                Ok(())
             }
-        }
+        };
+
+        // If we got here, return the original server state
+        mem::swap(&mut state, &mut self.state);
+        Ok(())
     }
 
     /// Dispatch message based on type
@@ -281,14 +289,13 @@ impl ServerConnection {
     /// Halt this socket connection
     fn halt(&mut self) -> ws::Result<()> {
         match self.output.as_mut() {
-            Some(ref m) => m.close(CloseCode::Normal),
+            Some(ref m) => m.close_with_reason(CloseCode::Error, "Server closed connection"),
             None => Ok(()),
         }
     }
 
     /// Require authorization to continue
-    /// Returns (result, end_request_early)
-    fn require_auth(&mut self, message: &str) -> (ws::Result<()>, bool) {
+    fn require_auth(&mut self, message: &str) -> Result<(), ExternalError> {
         let (authorized, auth_expired) = self.state.is_authorized();
 
         // You must authorize before you can do anything.
@@ -297,30 +304,13 @@ impl ServerConnection {
                 AuthResponse::Passed { event, expires } => {
                     self.logger.info(format!("Authorization success"));
                     self.state = ServerConnectionState::Authorized(ServerSession { expires });
-                    match &self.output {
-                        Some(out) => match serde_json::to_string(&event) {
-                            Ok(raw) => {
-                                let _ = out.send(raw);
-                                return (Ok(()), true);
-                            }
-                            Err(_) => {}
-                        },
-                        None => {}
-                    }
+                    return Ok(());
                 }
                 AuthResponse::Failed(event) => {
                     self.logger
                         .warn(format!("Auth failed: {:?}: {}", &event, message));
-                    match &self.output {
-                        Some(out) => match serde_json::to_string(&event) {
-                            Ok(raw) => {
-                                let _ = out.send(raw);
-                            }
-                            Err(_) => {}
-                        },
-                        None => {}
-                    }
-                    return (self.halt(), true);
+                    self.halt();
+                    return Err(ExternalError::from(ErrorCode::InvalidRequest));
                 }
             }
         }
@@ -332,20 +322,75 @@ impl ServerConnection {
                 message
             ));
             self.state = ServerConnectionState::None;
-            return (self.halt(), true);
+            return Err(ExternalError::from(ErrorCode::InvalidRequest));
         }
 
-        (Ok(()), false)
+        return Ok(());
+    }
+
+    /// Extract the auth token from the incoming request
+    fn message_from(&self, resource: &str) -> Option<String> {
+        if !resource.contains("=") {
+            return None;
+        }
+        let prefix = "/?token";
+        let parts: Vec<&str> = resource.split("=").collect();
+        if parts.len() != 2 {
+            return None;
+        }
+        if parts[0] != prefix {
+            return None;
+        }
+        let encoded = parts[1];
+        return match BASE64.decode(encoded.as_bytes()) {
+            Ok(values) => match from_utf8(&values) {
+                Ok(v) => Some(v.to_string()),
+                Err(_) => None,
+            },
+            Err(_) => None,
+        };
     }
 }
 
 impl Handler for ServerConnection {
+    fn on_open(&mut self, shake: ws::Handshake) -> ws::Result<()> {
+        match self.message_from(&shake.request.resource()) {
+            Some(message) => {
+                match self.require_auth(&message) {
+                    Ok(_) => {
+                        // On successful auth, spawn a reader thread
+                        println!("Start reader thread!");
+                        return Ok(());
+                    }
+                    Err(err) => {
+                        return Err(ws::Error::new(
+                            ws::ErrorKind::Custom(Box::new(err)),
+                            "Invalid request".to_string(),
+                        ));
+                    }
+                }
+            }
+            None => {
+                let err = ExternalError::from(ErrorCode::InvalidRequest);
+                return Err(ws::Error::new(
+                    ws::ErrorKind::Custom(Box::new(err)),
+                    "Invalid request".to_string(),
+                ));
+            }
+        }
+    }
+
     fn on_message(&mut self, msg: Message) -> ws::Result<()> {
         match msg {
             Message::Text(message) => {
-                let (auth_result, end_request_early) = self.require_auth(&message);
-                if end_request_early {
-                    return auth_result;
+                match self.require_auth(&message) {
+                    Ok(_) => {}
+                    Err(err) => {
+                        return Err(ws::Error::new(
+                            ws::ErrorKind::Custom(Box::new(err)),
+                            "Invalid request".to_string(),
+                        ));
+                    }
                 }
 
                 // Pick master / client mode

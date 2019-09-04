@@ -1,8 +1,8 @@
 use std::error::Error;
-use std::fmt::Display;
 use std::fmt;
+use std::fmt::Display;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AuthError {
     InvalidKey,
     InvalidHash,

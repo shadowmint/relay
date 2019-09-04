@@ -22,22 +22,10 @@ impl Client {
         let opt_b = options.clone();
         let opt_c = options.clone();
         Backend::new(BackendOptions {
+            auth: AuthHelper::generate_auth(&options.auth),
             remote: options.remote.clone(),
             target: options.backend,
             transaction_manager: TransactionManager::new(),
-        })
-        .then(move |b| match b {
-            Ok(connection) => match AuthHelper::generate_auth(&opt_a.auth) {
-                Ok(signed_auth_request) => {
-                    let promise = connection.send(signed_auth_request);
-                    Either::B(promise.then(move |r| match r {
-                        Ok(_) => Ok(connection),
-                        Err(e) => Err(e),
-                    }))
-                }
-                Err(e) => Either::A(futures::failed(e)),
-            },
-            Err(e) => Either::A(futures::failed(e)),
         })
         .then(move |b| match b {
             Ok(connection) => {

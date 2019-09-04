@@ -4,6 +4,7 @@ use crate::infrastructure::relay_event::RelayEvent;
 use crate::infrastructure::transaction_manager::TransactionManager;
 use futures::sync::oneshot;
 use futures::Future;
+use relay_auth::AuthEvent;
 use relay_core::events::client_event::ClientExternalEvent;
 use relay_core::events::master_event::MasterExternalEvent;
 use std::error::Error;
@@ -16,7 +17,7 @@ pub struct WebSocketBackend {
 }
 
 struct WebSocketHandler {
-    resolver: Arc<Mutex<Option<oneshot::Sender<Result<Box<ManagedConnectionHandler + Send + 'static>, RelayError>>>>>,
+    resolver: Arc<Mutex<Option<oneshot::Sender<Result<Box<dyn ManagedConnectionHandler + Send + 'static>, RelayError>>>>>,
     transaction_manager: TransactionManager,
     channel: crossbeam::Sender<RelayEvent>,
     out: ws::Sender,
@@ -27,7 +28,8 @@ impl WebSocketBackend {
         remote: &str,
         transaction_manager: TransactionManager,
         channel: crossbeam::Sender<RelayEvent>,
-    ) -> impl Future<Item = Box<ManagedConnectionHandler + Send + 'static>, Error = RelayError> {
+        auth: Result<AuthEvent, RelayError>,
+    ) -> impl Future<Item = Box<dyn ManagedConnectionHandler + Send + 'static>, Error = RelayError> {
         let (resolve, promise) = oneshot::channel();
         let resolve_sharable = Arc::new(Mutex::new(Some(resolve)));
         let remote_owned = remote.to_string();

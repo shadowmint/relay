@@ -11,7 +11,7 @@ pub struct AuthHelper {
 }
 
 impl AuthHelper {
-    pub fn generate_auth(options: &AuthOptions) -> Result<RelayEvent, RelayError> {
+    pub fn generate_auth(options: &AuthOptions) -> Result<AuthEvent, RelayError> {
         let helper = AuthHelper {
             secret: options.secret.clone(),
         };
@@ -28,7 +28,7 @@ impl AuthHelper {
             Err(e) => return Err(RelayError::AuthFailed(e)),
         }
 
-        Ok(RelayEvent::Auth(AuthEvent::Auth { transaction_id, request }))
+        Ok(AuthEvent::Auth { transaction_id, request })
     }
 }
 
