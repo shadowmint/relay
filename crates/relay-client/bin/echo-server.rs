@@ -26,6 +26,7 @@ fn main() {
             },
         })
         .then(|m| {
+            println!("Callback?");
             match m {
                 Ok(master) => {
                     println!("Service running...");

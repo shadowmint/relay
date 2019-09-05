@@ -13,32 +13,34 @@ impl MockBackend {
     pub fn new(
         transaction_manager: TransactionManager,
         auto_resolve: bool,
-    ) -> impl Future<Item = Box<ManagedConnectionHandler + Send + 'static>, Error = RelayError> {
+    ) -> impl Future<Item = Box<dyn ManagedConnectionHandler + Send + 'static>, Error = RelayError> {
         futures::finished(Box::new(MockBackend {
             transaction_manager,
             auto_resolve,
-        }) as Box<ManagedConnectionHandler + Send + 'static>)
+        }) as Box<dyn ManagedConnectionHandler + Send + 'static>)
     }
 }
 
 impl ManagedConnectionHandler for MockBackend {
-    fn send(&self, event: RelayEvent) {
+    fn send(&self, event: RelayEvent) -> Result<(), ()> {
         let raw = serde_json::to_string(&event).unwrap();
         let transaction_id = event.transaction_id();
-        println!("MOCK: {}", raw);
         if !self.auto_resolve {
-            return;
+            return Ok(());
         }
         match transaction_id.as_ref() {
             Some(id) => match self.transaction_manager.resolve(id, Ok(())) {
                 Ok(_) => {
                     println!("MOCK: resolved transaction {}", id);
+
+                    Ok(())
                 }
                 Err(e) => {
                     println!("MOCK: {:?}", e);
+                    Err(())
                 }
             },
-            None => {}
+            None => Err(()),
         }
     }
 }

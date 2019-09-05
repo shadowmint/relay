@@ -2,8 +2,10 @@ use crate::errors::relay_error::RelayError;
 use crate::infrastructure::managed_connection::ManagedConnectionHandler;
 use crate::infrastructure::relay_event::RelayEvent;
 use crate::infrastructure::transaction_manager::TransactionManager;
+use data_encoding::BASE64;
+use futures::future::Either;
 use futures::sync::oneshot;
-use futures::Future;
+use futures::{future, Future};
 use relay_auth::AuthEvent;
 use relay_core::events::client_event::ClientExternalEvent;
 use relay_core::events::master_event::MasterExternalEvent;
@@ -19,8 +21,8 @@ pub struct WebSocketBackend {
 struct WebSocketHandler {
     resolver: Arc<Mutex<Option<oneshot::Sender<Result<Box<dyn ManagedConnectionHandler + Send + 'static>, RelayError>>>>>,
     transaction_manager: TransactionManager,
-    channel: crossbeam::Sender<RelayEvent>,
-    out: ws::Sender,
+    channel: Option<crossbeam::Sender<RelayEvent>>,
+    out: Option<ws::Sender>,
 }
 
 impl WebSocketBackend {
@@ -32,17 +34,25 @@ impl WebSocketBackend {
     ) -> impl Future<Item = Box<dyn ManagedConnectionHandler + Send + 'static>, Error = RelayError> {
         let (resolve, promise) = oneshot::channel();
         let resolve_sharable = Arc::new(Mutex::new(Some(resolve)));
-        let remote_owned = remote.to_string();
+
+        // Resolve auth token
+        let token = match WebSocketBackend::get_token(auth) {
+            Ok(token) => token,
+            Err(err) => {
+                return Either::A(future::err(err));
+            }
+        };
 
         // Spawn the websocket worker function
+        let remote_owned = format!("{}/?token={}", remote, token);
         thread::spawn(move || {
             let err_reporter = resolve_sharable.clone();
-            if let Err(error) = connect(remote_owned, |out| {
+            if let Err(_) = connect(remote_owned, |out| {
                 return WebSocketHandler {
                     transaction_manager: transaction_manager.clone(),
                     resolver: resolve_sharable.clone(),
-                    channel: channel.clone(),
-                    out,
+                    channel: Some(channel.clone()),
+                    out: Some(out),
                 };
             }) {
                 let failure = Err(RelayError::ConnectionFailed("Unable to connect to remote".to_string()));
@@ -51,29 +61,44 @@ impl WebSocketBackend {
         });
 
         // Return a promise for the api
-        return promise.then(|r| match r {
+        return Either::B(promise.then(|r| match r {
             Ok(x) => match x {
                 Ok(handler) => Ok(handler),
                 Err(e) => Err(e),
             },
             Err(e) => Err(RelayError::SyncError(e.description().to_string())),
-        });
+        }));
+    }
+
+    fn get_token(auth: Result<AuthEvent, RelayError>) -> Result<String, RelayError> {
+        match auth {
+            Ok(event) => {
+                let as_string = serde_json::to_string(&event)?;
+                let as_base64 = BASE64.encode(as_string.as_bytes());
+                return Ok(as_base64);
+            }
+            Err(err) => Err(err),
+        }
     }
 }
 
 impl ManagedConnectionHandler for WebSocketBackend {
-    fn send(&self, event: RelayEvent) {
+    fn send(&self, event: RelayEvent) -> Result<(), ()> {
         let raw = match event {
-            RelayEvent::Auth(e) => serde_json::to_string(&e),
             RelayEvent::Client(e) => serde_json::to_string(&e),
             RelayEvent::Master(e) => serde_json::to_string(&e),
         };
         match raw {
-            Ok(data) => {
-                let _ = self.out.send(data);
-            }
+            Ok(data) => match self.out.send(data) {
+                Ok(_) => Ok(()),
+                Err(err) => {
+                    println!("Error sending message: {}", err);
+                    Err(())
+                }
+            },
             Err(e) => {
                 println!("ERROR!: {}", e.description());
+                Err(())
             }
         }
     }
@@ -81,12 +106,17 @@ impl ManagedConnectionHandler for WebSocketBackend {
 
 impl WebSocketHandler {
     fn on_connected(&mut self) {
-        let connected = Box::new(WebSocketBackend { out: self.out.clone() }) as Box<ManagedConnectionHandler + Send + 'static>;
+        let connected = Box::new(WebSocketBackend {
+            out: self.out.as_ref().unwrap().clone(),
+        }) as Box<dyn ManagedConnectionHandler + Send + 'static>;
         match WebSocketHandler::resolve(&self.resolver, Ok(connected)) {
             Ok(_) => {}
-            Err(e) => {
-                let _ = self.out.close(CloseCode::Abnormal);
-            }
+            Err(_) => match &self.out {
+                Some(out) => {
+                    let _ = out.close(CloseCode::Abnormal);
+                }
+                None => {}
+            },
         }
     }
 
@@ -110,8 +140,8 @@ impl WebSocketHandler {
     }
 
     pub fn resolve(
-        promise: &Arc<Mutex<Option<oneshot::Sender<Result<Box<ManagedConnectionHandler + Send + 'static>, RelayError>>>>>,
-        result: Result<Box<ManagedConnectionHandler + Send + 'static>, RelayError>,
+        promise: &Arc<Mutex<Option<oneshot::Sender<Result<Box<dyn ManagedConnectionHandler + Send + 'static>, RelayError>>>>>,
+        result: Result<Box<dyn ManagedConnectionHandler + Send + 'static>, RelayError>,
     ) -> Result<(), RelayError> {
         let mut promise_arc = promise.lock()?;
         match promise_arc.take() {
@@ -129,7 +159,7 @@ impl WebSocketHandler {
 }
 
 impl ws::Handler for WebSocketHandler {
-    fn on_open(&mut self, shake: ws::Handshake) -> ws::Result<()> {
+    fn on_open(&mut self, _: ws::Handshake) -> ws::Result<()> {
         println!("Connection handler invoked on websocket!");
         self.on_connected();
         Ok(())
@@ -148,9 +178,12 @@ impl ws::Handler for WebSocketHandler {
                         }
                     }
                 }
-                None => {
-                    self.channel.send(e);
-                }
+                None => match self.channel.as_ref() {
+                    Some(channel) => {
+                        let _ = channel.send(e);
+                    }
+                    None => {}
+                },
             },
             Err(e) => {
                 println!("Discarded message: {:?}", e);
@@ -161,10 +194,13 @@ impl ws::Handler for WebSocketHandler {
 
     fn on_close(&mut self, code: CloseCode, reason: &str) {
         println!("on_close in websocket handler: {:?}: {}", code, reason);
+        self.out.take().unwrap().shutdown();
+        self.channel.take();
     }
 
-    /// Called when an error occurs on the WebSocket.
     fn on_error(&mut self, err: ws::Error) {
         println!("Error in websocket handler: {:?}", err);
+        self.out.take().unwrap().shutdown();
+        self.channel.take();
     }
 }

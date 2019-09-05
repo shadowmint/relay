@@ -287,20 +287,28 @@ impl ServerConnection {
     }
 
     /// Halt this socket connection
-    fn halt(&mut self) -> ws::Result<()> {
+    fn halt(&mut self) {
         match self.output.as_mut() {
-            Some(ref m) => m.close_with_reason(CloseCode::Error, "Server closed connection"),
-            None => Ok(()),
+            Some(ref m) => {
+                match m.close_with_reason(CloseCode::Error, "Server closed connection") {
+                    Ok(_) => {}
+                    Err(err) => {
+                        self.logger
+                            .error(format!("Failed to close socket: {}", err));
+                    }
+                }
+            }
+            None => {}
         }
     }
 
     /// Require authorization to continue
-    fn require_auth(&mut self, message: &str) -> Result<(), ExternalError> {
+    fn require_auth(&mut self, message: Option<&str>) -> Result<(), ExternalError> {
         let (authorized, auth_expired) = self.state.is_authorized();
 
         // You must authorize before you can do anything.
-        if !authorized {
-            match self.try_authorize(&message) {
+        if !authorized && message.is_some() {
+            match self.try_authorize(message.as_ref().unwrap()) {
                 AuthResponse::Passed { event, expires } => {
                     self.logger.info(format!("Authorization success"));
                     self.state = ServerConnectionState::Authorized(ServerSession { expires });
@@ -308,7 +316,7 @@ impl ServerConnection {
                 }
                 AuthResponse::Failed(event) => {
                     self.logger
-                        .warn(format!("Auth failed: {:?}: {}", &event, message));
+                        .warn(format!("Auth failed: {:?}: {:?}", &event, message));
                     self.halt();
                     return Err(ExternalError::from(ErrorCode::InvalidRequest));
                 }
@@ -317,11 +325,9 @@ impl ServerConnection {
 
         // Check token expiry
         if auth_expired {
-            self.logger.warn(format!(
-                "Auth token expired: Discarded request: {}",
-                message
-            ));
+            self.logger.warn(format!("Auth token expired"));
             self.state = ServerConnectionState::None;
+            self.halt();
             return Err(ExternalError::from(ErrorCode::InvalidRequest));
         }
 
@@ -330,24 +336,24 @@ impl ServerConnection {
 
     /// Extract the auth token from the incoming request
     fn message_from(&self, resource: &str) -> Option<String> {
-        if !resource.contains("=") {
+        let prefix = "/?token=";
+        if !resource.starts_with(prefix) {
+            self.logger.warn(format!("Invalid token: bad prefix"));
             return None;
         }
-        let prefix = "/?token";
-        let parts: Vec<&str> = resource.split("=").collect();
-        if parts.len() != 2 {
-            return None;
-        }
-        if parts[0] != prefix {
-            return None;
-        }
-        let encoded = parts[1];
-        return match BASE64.decode(encoded.as_bytes()) {
+        let encoded: String = resource.chars().skip(prefix.len()).collect();
+        return match BASE64.decode(&encoded.as_bytes()) {
             Ok(values) => match from_utf8(&values) {
                 Ok(v) => Some(v.to_string()),
-                Err(_) => None,
+                Err(err) => {
+                    self.logger.warn(format!("Invalid token: {}", err));
+                    None
+                }
             },
-            Err(_) => None,
+            Err(err) => {
+                self.logger.warn(format!("Invalid token: {}", err));
+                None
+            }
         };
     }
 }
@@ -355,35 +361,24 @@ impl ServerConnection {
 impl Handler for ServerConnection {
     fn on_open(&mut self, shake: ws::Handshake) -> ws::Result<()> {
         match self.message_from(&shake.request.resource()) {
-            Some(message) => {
-                match self.require_auth(&message) {
-                    Ok(_) => {
-                        // On successful auth, spawn a reader thread
-                        println!("Start reader thread!");
-                        return Ok(());
-                    }
-                    Err(err) => {
-                        return Err(ws::Error::new(
-                            ws::ErrorKind::Custom(Box::new(err)),
-                            "Invalid request".to_string(),
-                        ));
-                    }
+            Some(message) => match self.require_auth(Some(&message)) {
+                Ok(_) => {}
+                Err(err) => {
+                    self.logger.warn(format!("Auth failed: {}", err));
                 }
-            }
+            },
             None => {
-                let err = ExternalError::from(ErrorCode::InvalidRequest);
-                return Err(ws::Error::new(
-                    ws::ErrorKind::Custom(Box::new(err)),
-                    "Invalid request".to_string(),
-                ));
+                self.logger.warn("Auth rejected: no token specified");
+                self.halt();
             }
         }
+        Ok(())
     }
 
     fn on_message(&mut self, msg: Message) -> ws::Result<()> {
         match msg {
             Message::Text(message) => {
-                match self.require_auth(&message) {
+                match self.require_auth(None) {
                     Ok(_) => {}
                     Err(err) => {
                         return Err(ws::Error::new(

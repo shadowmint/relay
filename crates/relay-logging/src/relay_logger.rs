@@ -1,7 +1,7 @@
-use base_logging::{Loggable, Level, LoggerRef};
-use base_logging::loggers::ConsoleLogger;
 use crate::relay_log_entry::RelayLogEntry;
 use crate::relay_log_format::RelayLogFormat;
+use base_logging::loggers::ConsoleLogger;
+use base_logging::{Level, Loggable, LoggerRef};
 
 pub(crate) const CONTEXT: &'static str = "context";
 pub(crate) const CONTEXT_DEFAULT: &'static str = "Unknown";
@@ -25,22 +25,27 @@ impl RelayLogger {
     }
 
     pub fn trace(&self, message: impl Loggable) {
-        self.logger.log(Level::Trace, RelayLogEntry::new(&self.context, &message));
+        self.logger
+            .log(Level::Trace, RelayLogEntry::new(&self.context, &message));
     }
 
     pub fn debug(&self, message: impl Loggable) {
-        self.logger.log(Level::Debug, RelayLogEntry::new(&self.context, &message));
+        self.logger
+            .log(Level::Debug, RelayLogEntry::new(&self.context, &message));
     }
 
     pub fn info(&self, message: impl Loggable) {
-        self.logger.log(Level::Info, RelayLogEntry::new(&self.context, &message));
+        self.logger
+            .log(Level::Info, RelayLogEntry::new(&self.context, &message));
     }
 
     pub fn warn(&self, message: impl Loggable) {
-        self.logger.log(Level::Warn, RelayLogEntry::new(&self.context, &message));
+        self.logger
+            .log(Level::Warn, RelayLogEntry::new(&self.context, &message));
     }
 
     pub fn error(&self, message: impl Loggable) {
-        self.logger.log(Level::Error, RelayLogEntry::new(&self.context, &message));
+        self.logger
+            .log(Level::Error, RelayLogEntry::new(&self.context, &message));
     }
 }

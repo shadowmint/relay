@@ -26,6 +26,7 @@ impl<TEvent: Send + Serialize + DeserializeOwned + 'static> MasterTyped<TEvent> 
     /// Create a new instance
     pub fn new(options: MasterOptions) -> impl Future<Item = MasterTyped<TEvent>, Error = RelayError> {
         Master::new(options).then(|r| {
+            println!("Got master!");
             let master = r?;
             let (sx, rx) = crossbeam::unbounded();
             let reader = master.channel().clone();

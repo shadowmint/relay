@@ -24,25 +24,32 @@ impl Master {
             target: options.backend,
             transaction_manager: TransactionManager::new(),
         })
-        .then(move |b| match b {
-            Ok(connection) => {
-                let promise = connection.send(RelayEvent::Master(MasterExternalEvent::InitializeMaster {
-                    transaction_id: Uuid::new_v4().to_string(),
-                    metadata: MasterMetadata {
-                        max_clients: opt_b.max_clients,
-                        master_id: opt_b.master_id,
-                    },
-                }));
-                Either::B(promise.then(move |r| match r {
-                    Ok(_) => Ok(connection),
-                    Err(e) => Err(e),
-                }))
+        .then(move |b| {
+            println!("Got to stage B");
+            match b {
+                Ok(connection) => {
+                    println!("Trying to send...");
+                    let promise = connection.send(RelayEvent::Master(MasterExternalEvent::InitializeMaster {
+                        transaction_id: Uuid::new_v4().to_string(),
+                        metadata: MasterMetadata {
+                            max_clients: opt_b.max_clients,
+                            master_id: opt_b.master_id,
+                        },
+                    }));
+                    Either::B(promise.then(move |r| match r {
+                        Ok(_) => Ok(connection),
+                        Err(e) => Err(e),
+                    }))
+                }
+                Err(e) => Either::A(futures::failed(e)),
             }
-            Err(e) => Either::A(futures::failed(e)),
         })
-        .then(|c| match c {
-            Ok(connection) => Ok(Master { connection }),
-            Err(e) => Err(e),
+        .then(|c| {
+            println!("Got to stage C");
+            match c {
+                Ok(connection) => Ok(Master { connection }),
+                Err(e) => Err(e),
+            }
         })
     }
 

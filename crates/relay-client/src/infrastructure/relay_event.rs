@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "object_type")]
 pub enum RelayEvent {
-    Auth(AuthEvent),
     Master(MasterExternalEvent),
     Client(ClientExternalEvent),
 }
@@ -15,14 +14,6 @@ pub enum RelayEvent {
 impl RelayEvent {
     pub fn transaction_id(&self) -> Option<String> {
         match self {
-            RelayEvent::Auth(a) => match a {
-                AuthEvent::Auth { transaction_id, request: _ } => Some(transaction_id.to_string()),
-                AuthEvent::TransactionResult {
-                    transaction_id,
-                    success: _,
-                    error: _,
-                } => Some(transaction_id.to_string()),
-            },
             RelayEvent::Master(m) => match m {
                 MasterExternalEvent::ClientDisconnected { client_id: _, reason: _ } => None,
                 MasterExternalEvent::InitializeMaster { transaction_id, metadata: _ } => Some(transaction_id.to_string()),
@@ -59,21 +50,6 @@ impl RelayEvent {
 
     pub fn transaction_result(&self) -> Result<(), ExternalError> {
         match self {
-            RelayEvent::Auth(a) => match a {
-                AuthEvent::Auth { transaction_id, request: _ } => Err(ExternalError::from(ErrorCode::Unknown)),
-                AuthEvent::TransactionResult {
-                    transaction_id: _,
-                    success,
-                    error,
-                } => {
-                    if *success {
-                        Ok(())
-                    } else {
-                        let err: Option<ExternalError> = error.clone();
-                        Err(err.unwrap_or(ExternalError::from(ErrorCode::Unknown)))
-                    }
-                }
-            },
             RelayEvent::Master(m) => match m {
                 MasterExternalEvent::ClientDisconnected { client_id: _, reason: _ } => Err(ExternalError::from(ErrorCode::Unknown)),
                 MasterExternalEvent::InitializeMaster { transaction_id, metadata: _ } => Err(ExternalError::from(ErrorCode::Unknown)),
