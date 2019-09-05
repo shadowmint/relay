@@ -100,7 +100,7 @@ impl<TEvent: Send + Serialize + DeserializeOwned + 'static> MasterTyped<TEvent> 
                                     }
                                 }
                             } else {
-                                sender.send(MasterEvent::External(event));
+                                let _ = sender.send(MasterEvent::External(event));
                             }
                         }
                         _ => {}

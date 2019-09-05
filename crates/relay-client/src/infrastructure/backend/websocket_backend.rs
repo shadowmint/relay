@@ -6,7 +6,7 @@ use data_encoding::BASE64;
 use futures::future::Either;
 use futures::sync::oneshot;
 use futures::{future, Future};
-use relay_auth::AuthEvent;
+use relay_auth::AuthRequest;
 use relay_core::events::client_event::ClientExternalEvent;
 use relay_core::events::master_event::MasterExternalEvent;
 use std::error::Error;
@@ -30,7 +30,7 @@ impl WebSocketBackend {
         remote: &str,
         transaction_manager: TransactionManager,
         channel: crossbeam::Sender<RelayEvent>,
-        auth: Result<AuthEvent, RelayError>,
+        auth: Result<AuthRequest, RelayError>,
     ) -> impl Future<Item = Box<dyn ManagedConnectionHandler + Send + 'static>, Error = RelayError> {
         let (resolve, promise) = oneshot::channel();
         let resolve_sharable = Arc::new(Mutex::new(Some(resolve)));
@@ -70,7 +70,7 @@ impl WebSocketBackend {
         }));
     }
 
-    fn get_token(auth: Result<AuthEvent, RelayError>) -> Result<String, RelayError> {
+    fn get_token(auth: Result<AuthRequest, RelayError>) -> Result<String, RelayError> {
         match auth {
             Ok(event) => {
                 let as_string = serde_json::to_string(&event)?;
@@ -194,13 +194,13 @@ impl ws::Handler for WebSocketHandler {
 
     fn on_close(&mut self, code: CloseCode, reason: &str) {
         println!("on_close in websocket handler: {:?}: {}", code, reason);
-        self.out.take().unwrap().shutdown();
+        let _ = self.out.take().unwrap().shutdown();
         self.channel.take();
     }
 
     fn on_error(&mut self, err: ws::Error) {
         println!("Error in websocket handler: {:?}", err);
-        self.out.take().unwrap().shutdown();
+        let _ = self.out.take().unwrap().shutdown();
         self.channel.take();
     }
 }

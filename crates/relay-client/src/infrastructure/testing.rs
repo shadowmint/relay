@@ -1,4 +1,4 @@
-use crate::infrastructure::managed_connection::{ManagedConnectionHandler};
+
 use futures::IntoFuture;
 
 pub fn block_on_future<F>(f: F) -> Result<F::Item, F::Error>

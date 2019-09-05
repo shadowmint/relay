@@ -2,7 +2,7 @@ use futures::Future;
 use relay_client::MasterEvent;
 use relay_client::MasterOptions;
 use relay_client::{AuthOptions, BackendType};
-use relay_client::{Master, MasterTyped};
+use relay_client::{MasterTyped};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]

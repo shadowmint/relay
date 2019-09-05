@@ -1,17 +1,17 @@
 use crate::errors::relay_error::RelayError;
-use crate::infrastructure::relay_event::RelayEvent;
-use crate::{AuthOptions, MasterOptions};
+
+use crate::{AuthOptions};
 use chrono::Utc;
 use relay_auth::AuthHasher;
-use relay_auth::{AuthEvent, AuthRequest, AuthSecretProvider};
-use uuid::Uuid;
+use relay_auth::{AuthRequest, AuthSecretProvider};
+
 
 pub struct AuthHelper {
     secret: String,
 }
 
 impl AuthHelper {
-    pub fn generate_auth(options: &AuthOptions) -> Result<AuthEvent, RelayError> {
+    pub fn generate_auth(options: &AuthOptions) -> Result<AuthRequest, RelayError> {
         let helper = AuthHelper {
             secret: options.secret.clone(),
         };
@@ -20,20 +20,18 @@ impl AuthHelper {
             key: options.key.clone(),
             hash: None,
         };
-        let transaction_id = Uuid::new_v4().to_string();
-        match AuthHasher::new().hash(&transaction_id, &request, &helper) {
+        match AuthHasher::new().hash(&request, &helper) {
             Ok(h) => {
                 request.hash = Some(h);
             }
             Err(e) => return Err(RelayError::AuthFailed(e)),
         }
-
-        Ok(AuthEvent::Auth { transaction_id, request })
+        Ok(request)
     }
 }
 
 impl AuthSecretProvider for AuthHelper {
-    fn secret_for(&self, key: &str) -> Option<String> {
+    fn secret_for(&self, _key: &str) -> Option<String> {
         Some(self.secret.to_string())
     }
 }

@@ -309,14 +309,13 @@ impl ServerConnection {
         // You must authorize before you can do anything.
         if !authorized && message.is_some() {
             match self.try_authorize(message.as_ref().unwrap()) {
-                AuthResponse::Passed { event, expires } => {
+                AuthResponse::Passed { expires } => {
                     self.logger.info(format!("Authorization success"));
                     self.state = ServerConnectionState::Authorized(ServerSession { expires });
                     return Ok(());
                 }
-                AuthResponse::Failed(event) => {
-                    self.logger
-                        .warn(format!("Auth failed: {:?}: {:?}", &event, message));
+                AuthResponse::Failed => {
+                    self.logger.warn(format!("Auth failed: {:?}", message));
                     self.halt();
                     return Err(ExternalError::from(ErrorCode::InvalidRequest));
                 }

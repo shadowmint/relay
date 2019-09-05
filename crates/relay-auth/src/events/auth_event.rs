@@ -1,22 +1,4 @@
-use relay_core::model::external_error::ExternalError;
 use serde::{Deserialize, Serialize};
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(tag = "object_type")]
-pub enum AuthEvent {
-    /// Login request
-    Auth {
-        transaction_id: String,
-        request: AuthRequest,
-    },
-
-    /// Sent by the application to notify about transaction result
-    TransactionResult {
-        transaction_id: String,
-        success: bool,
-        error: Option<ExternalError>,
-    },
-}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "object_type")]

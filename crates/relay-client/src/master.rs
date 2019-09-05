@@ -16,7 +16,7 @@ pub struct Master {
 
 impl Master {
     pub fn new(options: MasterOptions) -> impl Future<Item = Master, Error = RelayError> {
-        let opt_a = options.clone();
+        let _opt_a = options.clone();
         let opt_b = options.clone();
         Backend::new(BackendOptions {
             auth: AuthHelper::generate_auth(&options.auth),

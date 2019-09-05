@@ -97,7 +97,7 @@ impl<TEvent: Send + Serialize + DeserializeOwned + Debug + 'static> ClientTyped<
                                     }
                                 }
                             } else {
-                                sender.send(ClientEvent::External(event));
+                                let _ = sender.send(ClientEvent::External(event));
                             }
                         }
                         _ => {}

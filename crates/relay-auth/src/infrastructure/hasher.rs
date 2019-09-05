@@ -1,6 +1,6 @@
-use sha2::{Sha256, Digest};
-use crate::{AuthError, AuthRequest};
 use crate::auth_secret_provider::AuthSecretProvider;
+use crate::{AuthError, AuthRequest};
+use sha2::{Digest, Sha256};
 
 pub struct AuthHasher {}
 
@@ -11,15 +11,19 @@ impl AuthHasher {
     }
 
     /// Generate a new hash for a request, ignoring the hash field
-    pub fn hash(&self, transaction_id: &str, request: &AuthRequest, secret_store: &AuthSecretProvider) -> Result<String, AuthError> {
-        // prep, see auth_events.rs, the format is: transaction_id:expires:key:secret
+    pub fn hash(
+        &self,
+        request: &AuthRequest,
+        secret_store: &dyn AuthSecretProvider,
+    ) -> Result<String, AuthError> {
+        // prep, see auth_events.rs, the format is: expires:key:secret
         let secret = match secret_store.secret_for(&request.key) {
             Some(s) => s,
             None => {
                 return Err(AuthError::InvalidKey);
             }
         };
-        let input = format!("{}:{}:{}:{}", transaction_id, request.expires, request.key, secret);
+        let input = format!("{}:{}:{}", request.expires, request.key, secret);
 
         // execute
         let mut hasher = Sha256::new();
@@ -29,27 +33,28 @@ impl AuthHasher {
 
     /// Validate the hash on a request.
     /// The result is either Ok(()) or a failure reason.
-    pub fn validate(&self, transaction_id: &str, request: &AuthRequest, secret_store: &AuthSecretProvider) -> Result<(), AuthError> {
+    pub fn validate(
+        &self,
+        request: &AuthRequest,
+        secret_store: &dyn AuthSecretProvider,
+    ) -> Result<(), AuthError> {
         match request.hash.as_ref() {
             Some(s) => {
-                let hash = self.hash(transaction_id, request, secret_store)?;
+                let hash = self.hash(request, secret_store)?;
                 if hash == *s {
                     return Ok(());
                 }
                 return Err(AuthError::InvalidHash);
             }
-            None => {
-                Err(AuthError::InvalidHash)
-            }
+            None => Err(AuthError::InvalidHash),
         }
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use crate::infrastructure::hasher::AuthHasher;
     use crate::events::auth_event::AuthRequest;
+    use crate::infrastructure::hasher::AuthHasher;
     use crate::infrastructure::mocks::MockSecretProvider;
 
     #[test]
@@ -69,7 +74,7 @@ mod tests {
         secrets.set("123", "123");
 
         let hasher = AuthHasher::new();
-        let hash = hasher.hash("123", &request, &mut secrets).unwrap();
+        let hash = hasher.hash(&request, &mut secrets).unwrap();
         println!("Hash: {}", hash);
         assert!(hash.len() > 0);
     }
@@ -86,13 +91,13 @@ mod tests {
         secrets.set("123", "123");
 
         let hasher = AuthHasher::new();
-        let hash = hasher.hash("123", &request, &mut secrets).unwrap();
+        let hash = hasher.hash(&request, &mut secrets).unwrap();
 
         // Invalid before hash is assigned
-        assert!(hasher.validate("123", &request, &mut secrets).is_err());
+        assert!(hasher.validate(&request, &mut secrets).is_err());
 
         // Valid after hash is assigned
         request.hash = Some(hash);
-        assert!(hasher.validate("123", &request, &mut secrets).is_ok());
+        assert!(hasher.validate(&request, &mut secrets).is_ok());
     }
 }

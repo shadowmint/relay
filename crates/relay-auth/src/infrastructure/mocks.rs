@@ -1,15 +1,15 @@
-use std::collections::HashMap;
 use crate::auth_secret_provider::AuthSecretProvider;
 use crate::AuthProviderConfig;
+use std::collections::HashMap;
 
 pub struct MockSecretProvider {
-    map: HashMap<String, String>
+    map: HashMap<String, String>,
 }
 
 impl MockSecretProvider {
     pub fn new() -> MockSecretProvider {
         MockSecretProvider {
-            map: HashMap::new()
+            map: HashMap::new(),
         }
     }
 
@@ -39,7 +39,6 @@ impl MockAuthProviderConfig {
     pub fn mock_config() -> AuthProviderConfig {
         AuthProviderConfig {
             secret_store: Box::new(MockSecretProvider::new()),
-            min_transaction_id_length: 8,
             min_key_length: 8,
             max_token_expiry: 3600,
         }
@@ -50,16 +49,16 @@ impl MockAuthProviderConfig {
         store.set_many(secrets);
         AuthProviderConfig {
             secret_store: Box::new(store),
-            min_transaction_id_length: 8,
             min_key_length: 8,
             max_token_expiry: 3600,
         }
     }
 
-    pub fn mock_config_with_store(secrets: impl AuthSecretProvider + 'static) -> AuthProviderConfig {
+    pub fn mock_config_with_store(
+        secrets: impl AuthSecretProvider + 'static,
+    ) -> AuthProviderConfig {
         AuthProviderConfig {
             secret_store: Box::new(secrets),
-            min_transaction_id_length: 8,
             min_key_length: 8,
             max_token_expiry: 3600,
         }

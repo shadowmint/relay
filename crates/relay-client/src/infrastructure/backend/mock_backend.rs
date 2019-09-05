@@ -2,7 +2,7 @@ use crate::errors::relay_error::RelayError;
 use crate::infrastructure::managed_connection::ManagedConnectionHandler;
 use crate::infrastructure::relay_event::RelayEvent;
 use crate::infrastructure::transaction_manager::TransactionManager;
-use futures::{Future, IntoFuture};
+use futures::{Future};
 
 pub struct MockBackend {
     transaction_manager: TransactionManager,
@@ -23,7 +23,7 @@ impl MockBackend {
 
 impl ManagedConnectionHandler for MockBackend {
     fn send(&self, event: RelayEvent) -> Result<(), ()> {
-        let raw = serde_json::to_string(&event).unwrap();
+        let _raw = serde_json::to_string(&event).unwrap();
         let transaction_id = event.transaction_id();
         if !self.auto_resolve {
             return Ok(());

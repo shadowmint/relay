@@ -7,7 +7,7 @@ use crate::infrastructure::transaction_manager::TransactionManager;
 use crossbeam::crossbeam_channel;
 use futures::future::Either;
 use futures::Future;
-use relay_auth::AuthEvent;
+use relay_auth::AuthRequest;
 
 pub(crate) mod mock_backend;
 pub(crate) mod websocket_backend;
@@ -25,7 +25,7 @@ pub struct Backend {
 }
 
 pub struct BackendOptions {
-    pub auth: Result<AuthEvent, RelayError>,
+    pub auth: Result<AuthRequest, RelayError>,
     pub target: BackendType,
     pub remote: String,
     pub transaction_manager: TransactionManager,
@@ -75,11 +75,12 @@ mod tests {
     use crate::infrastructure::backend::{Backend, BackendOptions};
     use crate::infrastructure::testing::block_on_future;
     use crate::infrastructure::transaction_manager::TransactionManager;
-    use crate::BackendType;
+    use crate::{BackendType, RelayError};
 
     #[test]
     fn test_create_mock_backend() {
         let backend = block_on_future(Backend::new(BackendOptions {
+            auth: Err(RelayError::InternalError("Not implemented".to_string())),
             remote: format!("localhost:9977"),
             target: BackendType::Mock,
             transaction_manager: TransactionManager::new(),

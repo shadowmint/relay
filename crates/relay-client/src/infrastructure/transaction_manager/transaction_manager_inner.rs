@@ -1,5 +1,5 @@
 use futures::sync::oneshot::Sender;
-use relay_core::model::external_error::{ExternalError, ErrorCode};
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use chrono::Utc;

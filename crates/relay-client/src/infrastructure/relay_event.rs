@@ -1,4 +1,3 @@
-use relay_auth::AuthEvent;
 use relay_core::events::client_event::ClientExternalEvent;
 use relay_core::events::master_event::MasterExternalEvent;
 use relay_core::model::external_error::{ErrorCode, ExternalError};
@@ -52,7 +51,7 @@ impl RelayEvent {
         match self {
             RelayEvent::Master(m) => match m {
                 MasterExternalEvent::ClientDisconnected { client_id: _, reason: _ } => Err(ExternalError::from(ErrorCode::Unknown)),
-                MasterExternalEvent::InitializeMaster { transaction_id, metadata: _ } => Err(ExternalError::from(ErrorCode::Unknown)),
+                MasterExternalEvent::InitializeMaster { transaction_id: _, metadata: _ } => Err(ExternalError::from(ErrorCode::Unknown)),
                 MasterExternalEvent::MessageToClient {
                     transaction_id: _,
                     client_id: _,
@@ -74,12 +73,12 @@ impl RelayEvent {
                 MasterExternalEvent::MessageFromClient { client_id: _, data: _ } => Err(ExternalError::from(ErrorCode::Unknown)),
             },
             RelayEvent::Client(c) => match c {
-                ClientExternalEvent::InitializeClient { transaction_id, metadata: _ } => Err(ExternalError::from(ErrorCode::Unknown)),
+                ClientExternalEvent::InitializeClient { transaction_id: _, metadata: _ } => Err(ExternalError::from(ErrorCode::Unknown)),
                 ClientExternalEvent::Join {
                     transaction_id: _,
                     session_id: _,
                 } => Err(ExternalError::from(ErrorCode::Unknown)),
-                ClientExternalEvent::MessageFromClient { transaction_id, data: _ } => Err(ExternalError::from(ErrorCode::Unknown)),
+                ClientExternalEvent::MessageFromClient { transaction_id: _, data: _ } => Err(ExternalError::from(ErrorCode::Unknown)),
                 ClientExternalEvent::TransactionResult {
                     transaction_id: _,
                     success,

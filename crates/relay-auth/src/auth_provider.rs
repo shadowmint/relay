@@ -1,14 +1,11 @@
-use crate::events::auth_event::AuthEvent;
-use relay_core::model::external_error::ErrorCode::AuthFailed;
-use relay_core::model::external_error::ExternalError;
+use crate::infrastructure::validator::AuthValidator;
+use crate::{AuthProviderConfig, AuthRequest};
 use relay_logging::RelayLogger;
 use std::error::Error;
-use crate::infrastructure::validator::AuthValidator;
-use crate::AuthProviderConfig;
 
 pub enum AuthResponse {
-    Failed(AuthEvent),
-    Passed { event: AuthEvent, expires: i64 },
+    Failed,
+    Passed { expires: i64 },
 }
 
 pub struct AuthProvider {
@@ -29,15 +26,15 @@ impl AuthProvider {
 
     /// Convert a string into an event or an error
     pub fn authorize(&self, message: &str) -> AuthResponse {
-        match serde_json::from_str::<AuthEvent>(message) {
+        match serde_json::from_str::<AuthRequest>(message) {
             Ok(event) => self.process_authorize_request(event),
             Err(err) => {
-                self.logger.warn(format!("Failed to deserialize message: {}: {}", message, err.description()));
-                AuthResponse::Failed(AuthEvent::TransactionResult {
-                    transaction_id: "".to_string(),
-                    success: false,
-                    error: Some(ExternalError::from(AuthFailed)),
-                })
+                self.logger.warn(format!(
+                    "Failed to deserialize message: {}: {}",
+                    message,
+                    err.description()
+                ));
+                AuthResponse::Failed
             }
         }
     }
@@ -45,40 +42,18 @@ impl AuthProvider {
     /// Process an auth event and return a result or an error
     /// Returns an event to send to the client, and true/false for 'should keep connection'
     /// If 'should keep connection' is false,
-    fn process_authorize_request(&self, request: AuthEvent) -> AuthResponse {
-        match request {
-            AuthEvent::Auth { request, transaction_id } => {
-                let expires = request.expires;
-                let key = request.key.clone();
-                match self.validator.validate(&transaction_id.to_string(), request, &self.config) {
-                    Ok(_) => {
-                        self.logger.info(format!("Auth success: {}: key {}, expires: {}", transaction_id, key, expires));
-                        AuthResponse::Passed {
-                            expires,
-                            event: AuthEvent::TransactionResult {
-                                transaction_id,
-                                success: true,
-                                error: None,
-                            },
-                        }
-                    }
-                    Err(err) => {
-                        self.logger.warn(format!("Auth attempt failed: {:?}", err));
-                        AuthResponse::Failed(AuthEvent::TransactionResult {
-                            transaction_id,
-                            success: false,
-                            error: Some(ExternalError::from(AuthFailed)),
-                        })
-                    }
-                }
+    fn process_authorize_request(&self, request: AuthRequest) -> AuthResponse {
+        let expires = request.expires;
+        let key = request.key.clone();
+        match self.validator.validate(request, &self.config) {
+            Ok(_) => {
+                self.logger
+                    .info(format!("Auth success: key {}, expires: {}", key, expires));
+                AuthResponse::Passed { expires }
             }
-            _ => {
-                self.logger.warn(format!("Auth attempt failed: Invalid request: {:?}", request));
-                AuthResponse::Failed(AuthEvent::TransactionResult {
-                    transaction_id: "".to_string(),
-                    success: false,
-                    error: Some(ExternalError::from(AuthFailed)),
-                })
+            Err(err) => {
+                self.logger.warn(format!("Auth attempt failed: {:?}", err));
+                AuthResponse::Failed
             }
         }
     }
@@ -86,11 +61,11 @@ impl AuthProvider {
 
 #[cfg(test)]
 mod tests {
+    use crate::auth_provider::AuthResponse;
+    use crate::events::auth_event::AuthRequest;
+    use crate::infrastructure::hasher::AuthHasher;
     use crate::infrastructure::mocks::MockAuthProviderConfig;
     use crate::AuthProvider;
-    use crate::auth_provider::AuthResponse;
-    use crate::events::auth_event::{AuthEvent, AuthRequest};
-    use crate::infrastructure::hasher::AuthHasher;
     use chrono::Utc;
 
     #[test]
@@ -105,30 +80,30 @@ mod tests {
 
         // Bad format
         match auth.authorize("...") {
-            AuthResponse::Failed(_) => {}
-            _ => unreachable!()
+            AuthResponse::Failed => {}
+            _ => unreachable!(),
         }
 
         // Bad hash
-        let request = serde_json::to_string(&AuthEvent::Auth {
-            transaction_id: "123".to_string(),
-            request: AuthRequest {
-                expires: 123213,
-                key: "12323".to_string(),
-                hash: None,
-            },
-        }).unwrap();
+        let request = serde_json::to_string(&AuthRequest {
+            expires: 123213,
+            key: "12323".to_string(),
+            hash: None,
+        })
+        .unwrap();
+
         match auth.authorize(&request) {
-            AuthResponse::Failed(_) => {}
-            _ => unreachable!()
+            AuthResponse::Failed => {}
+            _ => unreachable!(),
         }
     }
 
     #[test]
     fn test_valid_auth_passes() {
-        let mut mocks = MockAuthProviderConfig::mock_config_with_secrets(
-            vec!(("12345678".to_string(), "99998888".to_string()))
-        );
+        let mut mocks = MockAuthProviderConfig::mock_config_with_secrets(vec![(
+            "12345678".to_string(),
+            "99998888".to_string(),
+        )]);
 
         // Build a valid hash
         let mut request = AuthRequest {
@@ -136,27 +111,22 @@ mod tests {
             key: "12345678".to_string(),
             hash: None,
         };
-        request.hash = Some(AuthHasher::new().hash("1234567890", &request, mocks.secret_store.as_mut()).unwrap());
+        request.hash = Some(
+            AuthHasher::new()
+                .hash(&request, mocks.secret_store.as_mut())
+                .unwrap(),
+        );
 
         // Build a valid request
-        let event = AuthEvent::Auth { request, transaction_id: "1234567890".to_string() };
-        let raw_event = serde_json::to_string(&event).unwrap();
+        let raw_event = serde_json::to_string(&request).unwrap();
 
         // Setup auth provider and check the request
         let auth = AuthProvider::new(mocks);
         match auth.authorize(&raw_event) {
-            AuthResponse::Passed { event, expires } => {
-                match event {
-                    AuthEvent::TransactionResult { transaction_id, success, error } => {
-                        assert!(success);
-                        assert!(error.is_none());
-                        assert!(expires > Utc::now().timestamp());
-                        assert_eq!(transaction_id, "1234567890");
-                    }
-                    _ => unreachable!()
-                }
+            AuthResponse::Passed { expires } => {
+                assert!(expires > Utc::now().timestamp());
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }

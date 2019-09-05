@@ -2,7 +2,7 @@ use crate::infrastructure::transaction_manager::transaction_manager_inner::Trans
 use futures::future::Either;
 use futures::sync::oneshot;
 use futures::Future;
-use relay_core::model::external_error::ErrorCode::{ArcMutexFailure, SyncError};
+
 use relay_core::model::external_error::ExternalError;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -51,7 +51,7 @@ impl TransactionManager {
                     Ok(mut inner) => {
                         inner.check_expired_transactions(timeout_ms);
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         break; // Arc failure
                     }
                 }
@@ -71,7 +71,7 @@ impl TransactionManager {
                 inner.resolve_pending(transaction_id, result.map_err(|e| RelayError::ExternalError(e)));
                 Ok(())
             }
-            Err(e) => Err(RelayError::ArcMutexFailure),
+            Err(_e) => Err(RelayError::ArcMutexFailure),
         }
     }
 
@@ -88,7 +88,7 @@ impl TransactionManager {
                     Err(e) => Err(RelayError::SyncError(e.description().to_string())),
                 }))
             }
-            Err(e) => Either::B(futures::failed(RelayError::ArcMutexFailure)),
+            Err(_e) => Either::B(futures::failed(RelayError::ArcMutexFailure)),
         }
     }
 }
@@ -97,7 +97,7 @@ impl TransactionManager {
 mod tests {
     use crate::infrastructure::testing::block_on_future;
     use crate::infrastructure::transaction_manager::TransactionManager;
-    use futures::Future;
+    
     use std::thread;
     use std::time::Duration;
 

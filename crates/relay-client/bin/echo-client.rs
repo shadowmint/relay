@@ -52,7 +52,7 @@ fn main() {
                                     }
                                     return Err(RelayError::InternalError(format!("Nah")));
                                 })
-                                .then(|r| Ok(())),
+                                .then(|_r| Ok(())),
                         );
                     }
                 }

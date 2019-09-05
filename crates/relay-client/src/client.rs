@@ -7,9 +7,9 @@ use crate::ClientOptions;
 use futures::future::Either;
 use futures::Future;
 use relay_core::events::client_event::ClientExternalEvent;
-use relay_core::events::master_event::MasterExternalEvent;
+
 use relay_core::model::client_metadata::ClientMetadata;
-use relay_core::model::master_metadata::MasterMetadata;
+
 use uuid::Uuid;
 
 pub struct Client {
@@ -18,7 +18,7 @@ pub struct Client {
 
 impl Client {
     pub fn new(options: ClientOptions) -> impl Future<Item = Client, Error = RelayError> {
-        let opt_a = options.clone();
+        let _opt_a = options.clone();
         let opt_b = options.clone();
         let opt_c = options.clone();
         Backend::new(BackendOptions {

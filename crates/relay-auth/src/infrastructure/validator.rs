@@ -1,8 +1,8 @@
-use crate::infrastructure::hasher::AuthHasher;
 use crate::events::auth_event::AuthRequest;
+use crate::infrastructure::hasher::AuthHasher;
 use crate::AuthError;
-use chrono::Utc;
 use crate::AuthProviderConfig;
+use chrono::Utc;
 
 pub struct AuthValidator {
     hasher: AuthHasher,
@@ -10,8 +10,7 @@ pub struct AuthValidator {
 
 impl AuthValidator {
     /// Create a new validator
-    pub fn
-    new() -> AuthValidator {
+    pub fn new() -> AuthValidator {
         AuthValidator {
             hasher: AuthHasher::new(),
         }
@@ -19,27 +18,32 @@ impl AuthValidator {
 
     /// Validate a request.
     /// The response is Ok(()) or a error with a reason
-    pub fn validate(&self, transaction_id: &str, request: AuthRequest, config: &AuthProviderConfig) -> Result<(), AuthError> {
-        self.validate_hash(transaction_id, &request, config)?;
-        self.validate_transaction_id(transaction_id, config)?;
+    pub fn validate(
+        &self,
+        request: AuthRequest,
+        config: &AuthProviderConfig,
+    ) -> Result<(), AuthError> {
+        self.validate_hash(&request, config)?;
         self.validate_expires(&request, config)?;
         self.validate_key(&request, config)?;
         Ok(())
     }
 
-    fn validate_hash(&self, transaction_id: &str, request: &AuthRequest, config: &AuthProviderConfig) -> Result<(), AuthError> {
-        self.hasher.validate(transaction_id, request, config.secret_store.as_ref())?;
+    fn validate_hash(
+        &self,
+        request: &AuthRequest,
+        config: &AuthProviderConfig,
+    ) -> Result<(), AuthError> {
+        self.hasher
+            .validate(request, config.secret_store.as_ref())?;
         Ok(())
     }
 
-    fn validate_transaction_id(&self, transaction_id: &str, config: &AuthProviderConfig) -> Result<(), AuthError> {
-        if transaction_id.len() < config.min_transaction_id_length {
-            return Err(AuthError::InvalidTransactionId);
-        }
-        Ok(())
-    }
-
-    fn validate_expires(&self, request: &AuthRequest, config: &AuthProviderConfig) -> Result<(), AuthError> {
+    fn validate_expires(
+        &self,
+        request: &AuthRequest,
+        config: &AuthProviderConfig,
+    ) -> Result<(), AuthError> {
         let now = Utc::now().timestamp();
         let max_expires = now + config.max_token_expiry;
         if request.expires < now || request.expires > max_expires {
@@ -48,7 +52,11 @@ impl AuthValidator {
         Ok(())
     }
 
-    fn validate_key(&self, request: &AuthRequest, config: &AuthProviderConfig) -> Result<(), AuthError> {
+    fn validate_key(
+        &self,
+        request: &AuthRequest,
+        config: &AuthProviderConfig,
+    ) -> Result<(), AuthError> {
         if request.key.len() < config.min_key_length {
             return Err(AuthError::InvalidKey);
         }
@@ -56,15 +64,14 @@ impl AuthValidator {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use crate::infrastructure::mocks::{MockSecretProvider, MockAuthProviderConfig};
-    use chrono::Utc;
     use crate::events::auth_event::AuthRequest;
     use crate::infrastructure::hasher::AuthHasher;
-    use crate::AuthError;
+    use crate::infrastructure::mocks::{MockAuthProviderConfig, MockSecretProvider};
     use crate::infrastructure::validator::AuthValidator;
+    use crate::AuthError;
+    use chrono::Utc;
 
     #[test]
     fn test_validate_request() {
@@ -81,14 +88,14 @@ mod tests {
         };
 
         // Sign request
-        request.hash = Some(AuthHasher::new().hash("32dfjadkjladskladfadfasdf", &request, &mut secrets).unwrap());
+        request.hash = Some(AuthHasher::new().hash(&request, &mut secrets).unwrap());
 
         // Execute
         let mut config = MockAuthProviderConfig::mock_config_with_store(secrets);
         let validator = AuthValidator::new();
 
         // Assert
-        assert!(validator.validate("32dfjadkjladskladfadfasdf", request, &mut config).is_ok());
+        assert!(validator.validate(request, &mut config).is_ok());
     }
 
     #[test]
@@ -108,21 +115,23 @@ mod tests {
         };
 
         // Sign request
-        request.hash = Some(AuthHasher::new().hash("32dfjadkjladskladfadfasdf", &request, &mut secrets_wrong).unwrap());
+        request.hash = Some(
+            AuthHasher::new()
+                .hash(&request, &mut secrets_wrong)
+                .unwrap(),
+        );
 
         // Execute
         let mut config = MockAuthProviderConfig::mock_config_with_store(secrets);
         let validator = AuthValidator::new();
 
         // Assert
-        match validator.validate("32dfjadkjladskladfadfasdf", request, &mut config) {
+        match validator.validate(request, &mut config) {
             Ok(_) => unreachable!(),
-            Err(e) => {
-                match e {
-                    AuthError::InvalidHash => {}
-                    _ => unreachable!()
-                }
-            }
+            Err(e) => match e {
+                AuthError::InvalidHash => {}
+                _ => unreachable!(),
+            },
         }
     }
 

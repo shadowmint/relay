@@ -52,9 +52,9 @@ mod tests {
     use crate::infrastructure::relay_event::RelayEvent;
     use crate::infrastructure::testing::block_on_future;
     use crate::infrastructure::transaction_manager::TransactionManager;
-    use futures::future::Either;
-    use futures::Future;
-    use relay_auth::{AuthEvent, AuthRequest};
+    
+    
+    
     use relay_core::events::master_event::MasterExternalEvent;
     use relay_core::model::master_metadata::MasterMetadata;
     use std::thread;
@@ -66,7 +66,7 @@ mod tests {
         let resolver = manager.clone();
         let mock = block_on_future(MockBackend::new(manager.clone(), false)).unwrap();
 
-        let connection = ManagedConnection::new(mock, manager);
+        let _connection = ManagedConnection::new(mock, manager);
 
         thread::spawn(move || {
             thread::sleep(Duration::from_millis(10));
@@ -81,7 +81,7 @@ mod tests {
         let mock = block_on_future(MockBackend::new(resolver.clone(), false)).unwrap();
 
         let connection = ManagedConnection::new(mock, manager);
-        let connection_ref = connection.clone();
+        let _connection_ref = connection.clone();
         let promise = connection.send(RelayEvent::Master(MasterExternalEvent::InitializeMaster {
             transaction_id: "5678".to_string(),
             metadata: MasterMetadata {
@@ -109,7 +109,7 @@ mod tests {
         let resolver = manager.clone();
         let mock = block_on_future(MockBackend::new(resolver.clone(), false)).unwrap();
 
-        let connection = ManagedConnection::new(mock, manager);
+        let _connection = ManagedConnection::new(mock, manager);
 
         thread::spawn(move || {
             thread::sleep(Duration::from_millis(200));
@@ -125,7 +125,7 @@ mod tests {
         let resolver = manager.clone();
         let mock = block_on_future(MockBackend::new(resolver.clone(), false)).unwrap();
 
-        let connection = ManagedConnection::new(mock, manager);
+        let _connection = ManagedConnection::new(mock, manager);
 
         thread::spawn(move || {
             thread::sleep(Duration::from_millis(10));

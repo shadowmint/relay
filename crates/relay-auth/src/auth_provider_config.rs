@@ -1,9 +1,6 @@
 use crate::auth_secret_provider::AuthSecretProvider;
 
 pub struct AuthProviderConfig {
-    /// Min length for transaction ids
-    pub min_transaction_id_length: usize,
-
     /// Min length for keys
     pub min_key_length: usize,
 
