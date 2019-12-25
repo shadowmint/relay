@@ -4,11 +4,11 @@ use crate::relay_logger::CONTEXT;
 
 pub struct RelayLogEntry<'a> {
     pub context: &'a str,
-    pub message: &'a Loggable,
+    pub message: &'a dyn Loggable,
 }
 
 impl<'a> RelayLogEntry<'a> {
-    pub fn new(context: &'a str, message: &'a Loggable) -> RelayLogEntry<'a> {
+    pub fn new(context: &'a str, message: &'a dyn Loggable) -> RelayLogEntry<'a> {
         return RelayLogEntry {
             context,
             message,
