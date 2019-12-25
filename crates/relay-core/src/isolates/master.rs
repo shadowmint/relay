@@ -213,7 +213,7 @@ impl Isolate<MasterEvent> for MasterIsolate {
         &self,
         identity: IsolateIdentity,
         channel: IsolateChannel<MasterEvent>,
-    ) -> Box<FnMut() + Send + 'static> {
+    ) -> Box<dyn FnMut() + Send + 'static> {
         let mut instance = self.instance(identity, &channel);
         Box::new(move || {
             let _ = instance.event_loop(&channel);

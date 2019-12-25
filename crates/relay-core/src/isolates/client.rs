@@ -191,7 +191,7 @@ impl Isolate<ClientEvent> for ClientIsolate {
         &self,
         identity: IsolateIdentity,
         channel: IsolateChannel<ClientEvent>,
-    ) -> Box<FnMut() + Send + 'static> {
+    ) -> Box<dyn FnMut() + Send + 'static> {
         let mut instance = self.instance(identity, &channel);
         Box::new(move || {
             let _ = instance.event_loop(&channel);
