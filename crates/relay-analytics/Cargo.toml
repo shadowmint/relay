@@ -9,5 +9,5 @@ base-logging = {  git = "https://github.com/shadowmint/rust-base-logging", branc
 rust-isolate = {  git = "https://github.com/shadowmint/rust-isolate", tag = "1.0.0"}
 relay-logging = { path = "../relay-logging" }
 futures = "0.1"
-crossbeam = "0.7.1"
+crossbeam = "0.7.3"
 regex = "1"
