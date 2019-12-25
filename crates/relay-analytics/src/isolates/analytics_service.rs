@@ -65,7 +65,7 @@ impl AnalyticsService {
 }
 
 impl Isolate<AnalyticsEventType> for AnalyticsService {
-    fn spawn(&self, _: IsolateIdentity, channel: IsolateChannel<AnalyticsEventType>) -> Box<FnMut() + Send + 'static> {
+    fn spawn(&self, _: IsolateIdentity, channel: IsolateChannel<AnalyticsEventType>) -> Box<dyn FnMut() + Send + 'static> {
         let context = self.context.clone();
         Box::new(move || {
             AnalyticsService::event_loop(&channel, &context);
