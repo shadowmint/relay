@@ -2,11 +2,9 @@ use crate::errors::relay_error::RelayError;
 use crate::infrastructure::relay_event::RelayEvent;
 use crate::master::Master;
 use crate::MasterOptions;
-use futures::future::Either;
-use futures::Future;
 use relay_core::events::master_event::MasterExternalEvent;
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::io::BufReader;
 use std::thread;
 use uuid::Uuid;
@@ -24,15 +22,15 @@ pub struct MasterTyped<TEvent> {
 
 impl<TEvent: Send + Serialize + DeserializeOwned + 'static> MasterTyped<TEvent> {
     /// Create a new instance
-    pub fn new(options: MasterOptions) -> impl Future<Item = MasterTyped<TEvent>, Error = RelayError> {
-        Master::new(options).then(|r| {
-            println!("Got master!");
-            let master = r?;
-            let (sx, rx) = crossbeam::unbounded();
-            let reader = master.channel().clone();
-            MasterTyped::<TEvent>::event_loop(reader, sx);
-            Ok(MasterTyped { master, input: rx })
-        })
+    pub async fn new(options: MasterOptions) -> Result<MasterTyped<TEvent>, RelayError> {
+        println!("Create master");
+        let master = Master::new(options).await?;
+        println!("Create master done");
+        let (sx, rx) = crossbeam::unbounded();
+        let reader = master.channel().clone();
+        MasterTyped::<TEvent>::event_loop(reader, sx);
+        println!("Ok master");
+        Ok(MasterTyped { master, input: rx })
     }
 
     /// Return a receiver channel for this connection
@@ -41,24 +39,24 @@ impl<TEvent: Send + Serialize + DeserializeOwned + 'static> MasterTyped<TEvent> 
     }
 
     /// Send an external event
-    pub fn send(&self, event: MasterEvent<TEvent>) -> impl Future<Item = (), Error = RelayError> {
+    pub async fn send(&self, event: MasterEvent<TEvent>) -> Result<(), RelayError> {
         match event {
-            MasterEvent::External(ext) => Either::A(self.master.send(ext)),
-            MasterEvent::Internal { client_id, event } => Either::B(self.send_to_client(client_id, event)),
+            MasterEvent::External(ext) => self.master.send(ext).await,
+            MasterEvent::Internal { client_id, event } => self.send_to_client(client_id, event).await,
         }
     }
 
-    fn send_to_client(&self, client_id: String, event: TEvent) -> impl Future<Item = (), Error = RelayError> {
+    async fn send_to_client(&self, client_id: String, event: TEvent) -> Result<(), RelayError> {
         let raw = match self.serialize(event) {
             Ok(r) => r,
-            Err(e) => return Either::B(futures::failed(e)),
+            Err(e) => return Err(e),
         };
         let event = MasterExternalEvent::MessageToClient {
             client_id,
             transaction_id: Uuid::new_v4().to_string(),
             data: raw,
         };
-        Either::A(self.master.send(event))
+        self.master.send(event).await
     }
 
     fn serialize(&self, event: TEvent) -> Result<String, RelayError> {

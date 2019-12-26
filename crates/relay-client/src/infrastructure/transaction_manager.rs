@@ -1,15 +1,12 @@
+use crate::errors::relay_error::RelayError;
 use crate::infrastructure::transaction_manager::transaction_manager_inner::TransactionManagerInner;
-use futures::future::Either;
-use futures::sync::oneshot;
-use futures::Future;
-
+use futures::channel::oneshot;
 use relay_core::model::external_error::ExternalError;
+use std::error::Error;
+use std::sync::mpsc::{channel, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::sync::mpsc::{Sender, channel, TryRecvError};
 use std::time::Duration;
-use crate::errors::relay_error::RelayError;
-use std::error::Error;
 
 mod transaction_manager_inner;
 
@@ -27,6 +24,7 @@ impl TransactionManager {
         };
     }
 
+    #[allow(dead_code)]
     pub fn set_timeout(&mut self, timeout_ms: i64, poll_interval_ms: u64) {
         let inner_ref = self.inner.clone();
         let (sx, rx) = channel();
@@ -61,11 +59,7 @@ impl TransactionManager {
         });
     }
 
-    pub fn resolve(
-        &self,
-        transaction_id: &str,
-        result: Result<(), ExternalError>,
-    ) -> Result<(), RelayError> {
+    pub fn resolve(&self, transaction_id: &str, result: Result<(), ExternalError>) -> Result<(), RelayError> {
         match self.inner.lock() {
             Ok(mut inner) => {
                 inner.resolve_pending(transaction_id, result.map_err(|e| RelayError::ExternalError(e)));
@@ -75,20 +69,20 @@ impl TransactionManager {
         }
     }
 
-    pub fn defer(&self, transaction_id: &str) -> impl Future<Item=(), Error=RelayError> {
+    pub async fn defer(&self, transaction_id: &str) -> Result<(), RelayError> {
         match self.inner.lock() {
             Ok(mut inner) => {
                 let (sx, rx) = oneshot::channel();
                 inner.save_pending_transaction(transaction_id, sx);
-                Either::A(rx.then(|r| match r {
+                match rx.await {
                     Ok(result) => match result {
                         Ok(_) => Ok(()),
                         Err(e) => Err(e),
                     },
-                    Err(e) => Err(RelayError::SyncError(e.description().to_string())),
-                }))
+                    Err(e) => Err(RelayError::SyncError(format!("{}", e))),
+                }
             }
-            Err(_e) => Either::B(futures::failed(RelayError::ArcMutexFailure)),
+            Err(_e) => Err(RelayError::ArcMutexFailure),
         }
     }
 }
@@ -97,7 +91,7 @@ impl TransactionManager {
 mod tests {
     use crate::infrastructure::testing::block_on_future;
     use crate::infrastructure::transaction_manager::TransactionManager;
-    
+
     use std::thread;
     use std::time::Duration;
 

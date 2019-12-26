@@ -4,12 +4,11 @@ use crate::infrastructure::backend::{Backend, BackendOptions};
 use crate::infrastructure::relay_event::RelayEvent;
 use crate::infrastructure::transaction_manager::TransactionManager;
 use crate::ClientOptions;
-use futures::future::Either;
-use futures::Future;
 use relay_core::events::client_event::ClientExternalEvent;
 
 use relay_core::model::client_metadata::ClientMetadata;
 
+use std::future::Future;
 use uuid::Uuid;
 
 pub struct Client {
@@ -17,53 +16,37 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(options: ClientOptions) -> impl Future<Item = Client, Error = RelayError> {
-        let _opt_a = options.clone();
-        let opt_b = options.clone();
-        let opt_c = options.clone();
-        Backend::new(BackendOptions {
+    pub async fn new(options: ClientOptions) -> Result<Client, RelayError> {
+        let client = Backend::new(BackendOptions {
             auth: AuthHelper::generate_auth(&options.auth),
             remote: options.remote.clone(),
             target: options.backend,
             transaction_manager: TransactionManager::new(),
         })
-        .then(move |b| match b {
-            Ok(connection) => {
-                let promise = connection.send(RelayEvent::Client(ClientExternalEvent::InitializeClient {
-                    transaction_id: Uuid::new_v4().to_string(),
-                    metadata: ClientMetadata { name: opt_b.client_id },
-                }));
-                Either::B(promise.then(move |r| match r {
-                    Ok(_) => Ok(connection),
-                    Err(e) => Err(e),
-                }))
-            }
-            Err(e) => Either::A(futures::failed(e)),
-        })
-        .then(move |b| match b {
-            Ok(connection) => {
-                let promise = connection.send(RelayEvent::Client(ClientExternalEvent::Join {
-                    transaction_id: Uuid::new_v4().to_string(),
-                    session_id: opt_c.session_id.clone(),
-                }));
-                Either::B(promise.then(move |r| match r {
-                    Ok(_) => Ok(connection),
-                    Err(e) => Err(e),
-                }))
-            }
-            Err(e) => Either::A(futures::failed(e)),
-        })
-        .then(|c| match c {
-            Ok(connection) => Ok(Client { connection }),
-            Err(e) => Err(e),
-        })
+        .await?;
+
+        client
+            .send(RelayEvent::Client(ClientExternalEvent::InitializeClient {
+                transaction_id: Uuid::new_v4().to_string(),
+                metadata: ClientMetadata { name: options.client_id },
+            }))
+            .await?;
+
+        client
+            .send(RelayEvent::Client(ClientExternalEvent::Join {
+                transaction_id: Uuid::new_v4().to_string(),
+                session_id: options.session_id.clone(),
+            }))
+            .await?;
+
+        Ok(Client { connection: client })
     }
 
     pub fn channel(&self) -> crossbeam::Receiver<RelayEvent> {
         self.connection.channel()
     }
 
-    pub fn send(&self, event: ClientExternalEvent) -> impl Future<Item = (), Error = RelayError> {
+    pub fn send(&self, event: ClientExternalEvent) -> impl Future<Output = Result<(), RelayError>> + '_ {
         self.connection.send(RelayEvent::Client(event))
     }
 }

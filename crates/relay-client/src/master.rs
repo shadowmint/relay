@@ -4,10 +4,10 @@ use crate::infrastructure::backend::{Backend, BackendOptions};
 use crate::infrastructure::relay_event::RelayEvent;
 use crate::infrastructure::transaction_manager::TransactionManager;
 use crate::MasterOptions;
-use futures::future::Either;
-use futures::Future;
+
 use relay_core::events::master_event::MasterExternalEvent;
 use relay_core::model::master_metadata::MasterMetadata;
+use std::future::Future;
 use uuid::Uuid;
 
 pub struct Master {
@@ -15,49 +15,33 @@ pub struct Master {
 }
 
 impl Master {
-    pub fn new(options: MasterOptions) -> impl Future<Item = Master, Error = RelayError> {
-        let _opt_a = options.clone();
-        let opt_b = options.clone();
-        Backend::new(BackendOptions {
+    pub async fn new(options: MasterOptions) -> Result<Master, RelayError> {
+        let backend = Backend::new(BackendOptions {
             auth: AuthHelper::generate_auth(&options.auth),
             remote: options.remote.clone(),
             target: options.backend,
             transaction_manager: TransactionManager::new(),
         })
-        .then(move |b| {
-            println!("Got to stage B");
-            match b {
-                Ok(connection) => {
-                    println!("Trying to send...");
-                    let promise = connection.send(RelayEvent::Master(MasterExternalEvent::InitializeMaster {
-                        transaction_id: Uuid::new_v4().to_string(),
-                        metadata: MasterMetadata {
-                            max_clients: opt_b.max_clients,
-                            master_id: opt_b.master_id,
-                        },
-                    }));
-                    Either::B(promise.then(move |r| match r {
-                        Ok(_) => Ok(connection),
-                        Err(e) => Err(e),
-                    }))
-                }
-                Err(e) => Either::A(futures::failed(e)),
-            }
-        })
-        .then(|c| {
-            println!("Got to stage C");
-            match c {
-                Ok(connection) => Ok(Master { connection }),
-                Err(e) => Err(e),
-            }
-        })
+        .await?;
+        println!("Backend send");
+        backend
+            .send(RelayEvent::Master(MasterExternalEvent::InitializeMaster {
+                transaction_id: Uuid::new_v4().to_string(),
+                metadata: MasterMetadata {
+                    max_clients: options.max_clients,
+                    master_id: options.master_id,
+                },
+            }))
+            .await?;
+
+        Ok(Master { connection: backend })
     }
 
     pub fn channel(&self) -> crossbeam::Receiver<RelayEvent> {
         self.connection.channel()
     }
 
-    pub fn send(&self, event: MasterExternalEvent) -> impl Future<Item = (), Error = RelayError> {
+    pub fn send(&self, event: MasterExternalEvent) -> impl Future<Output = Result<(), RelayError>> + '_ {
         self.connection.send(RelayEvent::Master(event))
     }
 }

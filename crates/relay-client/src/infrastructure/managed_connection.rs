@@ -1,7 +1,6 @@
 use crate::errors::relay_error::RelayError;
 use crate::infrastructure::relay_event::RelayEvent;
 use crate::infrastructure::transaction_manager::TransactionManager;
-use futures::future::Either;
 use futures::{future, Future};
 use std::sync::{Arc, Mutex};
 
@@ -23,24 +22,24 @@ impl ManagedConnection {
         }
     }
 
-    pub fn send(&self, event: RelayEvent) -> impl Future<Item = (), Error = RelayError> {
+    pub async fn send(&self, event: RelayEvent) -> Result<(), RelayError> {
         match event.transaction_id() {
-            Some(s) => Either::A(self.send_internal(&s, event)),
-            None => Either::B(futures::failed(RelayError::InvalidEvent(format!("No transaction id found")))),
+            Some(s) => self.send_internal(&s, event).await,
+            None => Err(RelayError::InvalidEvent(format!("No transaction id found"))),
         }
     }
 
-    fn send_internal(&self, transaction_id: &str, event: RelayEvent) -> impl Future<Item = (), Error = RelayError> {
+    async fn send_internal(&self, transaction_id: &str, event: RelayEvent) -> Result<(), RelayError> {
         match self.internal.lock() {
             Ok(internal) => match internal.send(event) {
-                Ok(_) => return Either::A(self.transactions.defer(transaction_id)),
-                Err(_) => return Either::B(ManagedConnection::internal_error()),
+                Ok(_) => return self.transactions.defer(transaction_id).await,
+                Err(_) => return ManagedConnection::internal_error().await,
             },
-            Err(_) => return Either::B(ManagedConnection::internal_error()),
+            Err(_) => return ManagedConnection::internal_error().await,
         }
     }
 
-    fn internal_error() -> impl Future<Item = (), Error = RelayError> {
+    fn internal_error() -> impl Future<Output = Result<(), RelayError>> {
         return future::err::<(), RelayError>(RelayError::InternalError(format!("Send failed")));
     }
 }
@@ -52,9 +51,7 @@ mod tests {
     use crate::infrastructure::relay_event::RelayEvent;
     use crate::infrastructure::testing::block_on_future;
     use crate::infrastructure::transaction_manager::TransactionManager;
-    
-    
-    
+
     use relay_core::events::master_event::MasterExternalEvent;
     use relay_core::model::master_metadata::MasterMetadata;
     use std::thread;

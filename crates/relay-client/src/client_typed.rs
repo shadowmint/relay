@@ -2,8 +2,7 @@ use crate::client::Client;
 use crate::errors::relay_error::RelayError;
 use crate::infrastructure::relay_event::RelayEvent;
 use crate::ClientOptions;
-use futures::future::Either;
-use futures::Future;
+
 use relay_core::events::client_event::ClientExternalEvent;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -25,14 +24,12 @@ pub struct ClientTyped<TEvent> {
 
 impl<TEvent: Send + Serialize + DeserializeOwned + Debug + 'static> ClientTyped<TEvent> {
     /// Create a new instance
-    pub fn new(options: ClientOptions) -> impl Future<Item = ClientTyped<TEvent>, Error = RelayError> {
-        Client::new(options).then(|r| {
-            let client = r?;
-            let (sx, rx) = crossbeam::unbounded();
-            let reader = client.channel().clone();
-            ClientTyped::<TEvent>::event_loop(reader, sx);
-            Ok(ClientTyped { client: client, input: rx })
-        })
+    pub async fn new(options: ClientOptions) -> Result<ClientTyped<TEvent>, RelayError> {
+        let client = Client::new(options).await?;
+        let (sx, rx) = crossbeam::unbounded();
+        let reader = client.channel().clone();
+        ClientTyped::<TEvent>::event_loop(reader, sx);
+        Ok(ClientTyped { client, input: rx })
     }
 
     /// Return a receiver channel for this connection
@@ -41,23 +38,23 @@ impl<TEvent: Send + Serialize + DeserializeOwned + Debug + 'static> ClientTyped<
     }
 
     /// Send an external event
-    pub fn send(&self, event: ClientEvent<TEvent>) -> impl Future<Item = (), Error = RelayError> {
+    pub async fn send(&self, event: ClientEvent<TEvent>) -> Result<(), RelayError> {
         match event {
-            ClientEvent::External(ext) => Either::A(self.client.send(ext)),
-            ClientEvent::Internal(event) => Either::B(self.send_to_master(event)),
+            ClientEvent::External(ext) => self.client.send(ext).await,
+            ClientEvent::Internal(event) => self.send_to_master(event).await,
         }
     }
 
-    fn send_to_master(&self, event: TEvent) -> impl Future<Item = (), Error = RelayError> {
+    async fn send_to_master(&self, event: TEvent) -> Result<(), RelayError> {
         let raw = match self.serialize(event) {
             Ok(r) => r,
-            Err(e) => return Either::B(futures::failed(e)),
+            Err(e) => return Err(e),
         };
         let event = ClientExternalEvent::MessageFromClient {
             transaction_id: Uuid::new_v4().to_string(),
             data: raw,
         };
-        Either::A(self.client.send(event))
+        self.client.send(event).await
     }
 
     fn serialize(&self, event: TEvent) -> Result<String, RelayError> {

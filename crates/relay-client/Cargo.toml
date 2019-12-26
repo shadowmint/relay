@@ -4,19 +4,12 @@ version = "0.1.0"
 authors = ["Douglas Linder <linderd@iinet.net.au>"]
 edition = "2018"
 
-[[bin]]
-name = "echo-server"
-path = "bin/echo-server.rs"
-
-[[bin]]
-name = "echo-client"
-path = "bin/echo-client.rs"
-
 [dependencies]
 relay-core = { path = "../relay-core" }
 relay-auth = { path = "../relay-auth" }
 ws = "0.9"
 getopts = "0.2"
+futures = "0.3"
 crossbeam = "0.7.3"
 tokio= "0.2"
 chrono = "0.4"
@@ -24,3 +17,4 @@ uuid = { version = "0.7", features = ["v4"] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 data-encoding = "2.1.2"
+

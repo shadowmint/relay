@@ -1,9 +1,9 @@
-use futures::sync::oneshot::Sender;
+use futures::channel::oneshot::Sender;
 
+use crate::errors::relay_error::RelayError;
+use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use chrono::Utc;
-use crate::errors::relay_error::RelayError;
 
 struct PendingTransaction {
     promise: Sender<Result<(), RelayError>>,
@@ -16,18 +16,16 @@ pub struct TransactionManagerInner {
 
 impl TransactionManagerInner {
     pub fn new() -> Arc<Mutex<TransactionManagerInner>> {
-        return Arc::new(Mutex::new(TransactionManagerInner {
-            pending: HashMap::new(),
-        }));
+        return Arc::new(Mutex::new(TransactionManagerInner { pending: HashMap::new() }));
     }
 
+    #[allow(dead_code)]
     pub fn check_expired_transactions(&mut self, timeout_ms: i64) {
         let threshold = Utc::now().timestamp_millis() - timeout_ms;
-        let expired: Vec<String> = self.pending
+        let expired: Vec<String> = self
+            .pending
             .iter()
-            .filter(|(_, v)| {
-                v.started < threshold
-            })
+            .filter(|(_, v)| v.started < threshold)
             .map(|(k, _)| k.to_string())
             .collect();
         for expired_key in expired {
@@ -44,14 +42,13 @@ impl TransactionManagerInner {
         }
     }
 
-    pub fn save_pending_transaction(
-        &mut self,
-        transaction_id: &str,
-        promise: Sender<Result<(), RelayError>>,
-    ) {
-        self.pending.insert(transaction_id.to_string(), PendingTransaction {
-            promise,
-            started: Utc::now().timestamp_millis(),
-        });
+    pub fn save_pending_transaction(&mut self, transaction_id: &str, promise: Sender<Result<(), RelayError>>) {
+        self.pending.insert(
+            transaction_id.to_string(),
+            PendingTransaction {
+                promise,
+                started: Utc::now().timestamp_millis(),
+            },
+        );
     }
 }

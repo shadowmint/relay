@@ -4,8 +4,8 @@ use crate::infrastructure::backend::websocket_backend::WebSocketBackend;
 use crate::infrastructure::managed_connection::ManagedConnection;
 use crate::infrastructure::relay_event::RelayEvent;
 use crate::infrastructure::transaction_manager::TransactionManager;
+
 use crossbeam::crossbeam_channel;
-use futures::future::Either;
 use futures::Future;
 use relay_auth::AuthRequest;
 
@@ -33,28 +33,21 @@ pub struct BackendOptions {
 
 impl Backend {
     /// Create a new backend with a named implementation
-    pub fn new(options: BackendOptions) -> impl Future<Item = Backend, Error = RelayError> {
+    pub async fn new(options: BackendOptions) -> Result<Backend, RelayError> {
         let (sx, rx) = crossbeam_channel::unbounded();
-        let promise = match options.target {
-            BackendType::Mock => Either::A(MockBackend::new(options.transaction_manager.clone(), true)),
-            BackendType::WebSocket => Either::B(WebSocketBackend::new(
-                &options.remote,
-                options.transaction_manager.clone(),
-                sx,
-                options.auth.clone(),
-            )),
-        };
-        return promise.then(move |r| match r {
-            Ok(handler) => Ok(Backend {
-                channel: rx,
-                target: options.target,
-                connection: ManagedConnection::new(handler, options.transaction_manager.clone()),
-            }),
-            Err(e) => Err(e),
-        });
+        let backend = match options.target {
+            BackendType::Mock => MockBackend::new(options.transaction_manager.clone(), true).await,
+            BackendType::WebSocket => WebSocketBackend::new(&options.remote, options.transaction_manager.clone(), sx, options.auth.clone()).await,
+        }?;
+        Ok(Backend {
+            channel: rx,
+            target: options.target,
+            connection: ManagedConnection::new(backend, options.transaction_manager.clone()),
+        })
     }
 
     /// Return the target for this backend
+    #[allow(dead_code)]
     pub fn target(&self) -> BackendType {
         self.target
     }
@@ -65,7 +58,7 @@ impl Backend {
     }
 
     /// Send an external event
-    pub fn send(&self, event: RelayEvent) -> impl Future<Item = (), Error = RelayError> {
+    pub fn send(&self, event: RelayEvent) -> impl Future<Output = Result<(), RelayError>> + '_ {
         self.connection.send(event)
     }
 }

@@ -1,6 +1,6 @@
 use crate::infrastructure::managed_connection::ManagedConnectionHandler;
-use futures::sync::oneshot;
-use futures::sync::oneshot::Canceled;
+use futures::channel::oneshot;
+use futures::channel::oneshot::Canceled;
 use relay_auth::AuthError;
 use relay_core::model::external_error::ExternalError;
 use std::error::Error;
@@ -30,19 +30,19 @@ impl fmt::Display for RelayError {
 
 impl From<Canceled> for RelayError {
     fn from(e: Canceled) -> Self {
-        RelayError::SyncError(e.description().to_string())
+        RelayError::SyncError(format!("{}", e))
     }
 }
 
 impl From<serde_json::Error> for RelayError {
     fn from(e: serde_json::Error) -> Self {
-        RelayError::SerializationError(e.description().to_string())
+        RelayError::SerializationError(format!("{}", e))
     }
 }
 
 impl From<ws::Error> for RelayError {
     fn from(e: ws::Error) -> Self {
-        RelayError::ConnectionFailed(e.description().to_string())
+        RelayError::ConnectionFailed(format!("{}", e))
     }
 }
 

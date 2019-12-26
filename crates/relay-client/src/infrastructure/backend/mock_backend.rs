@@ -2,7 +2,8 @@ use crate::errors::relay_error::RelayError;
 use crate::infrastructure::managed_connection::ManagedConnectionHandler;
 use crate::infrastructure::relay_event::RelayEvent;
 use crate::infrastructure::transaction_manager::TransactionManager;
-use futures::{Future};
+use futures::future;
+use futures::Future;
 
 pub struct MockBackend {
     transaction_manager: TransactionManager,
@@ -13,8 +14,8 @@ impl MockBackend {
     pub fn new(
         transaction_manager: TransactionManager,
         auto_resolve: bool,
-    ) -> impl Future<Item = Box<dyn ManagedConnectionHandler + Send + 'static>, Error = RelayError> {
-        futures::finished(Box::new(MockBackend {
+    ) -> impl Future<Output = Result<Box<dyn ManagedConnectionHandler + Send + 'static>, RelayError>> {
+        future::ok(Box::new(MockBackend {
             transaction_manager,
             auto_resolve,
         }) as Box<dyn ManagedConnectionHandler + Send + 'static>)

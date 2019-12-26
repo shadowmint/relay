@@ -1,15 +1,15 @@
-use std::fmt::Display;
-use std::error::Error;
-use std::fmt;
-use rust_isolate::IsolateRuntimeError;
-use rust_isolate::IsolateRegistryError;
+use crate::analytics_context::AnalyticsContext;
+use crate::AnalyticsEventType;
+use base_logging::Loggable;
 use futures::sync::oneshot;
 use futures::sync::oneshot::Canceled;
-use base_logging::Loggable;
+use rust_isolate::IsolateRegistryError;
+use rust_isolate::IsolateRuntimeError;
 use std::collections::HashMap;
-use crate::AnalyticsEventType;
-use std::sync::{PoisonError, MutexGuard};
-use crate::analytics_context::AnalyticsContext;
+use std::error::Error;
+use std::fmt;
+use std::fmt::Display;
+use std::sync::{MutexGuard, PoisonError};
 
 #[derive(Debug)]
 pub enum AnalyticsError {
@@ -51,30 +51,30 @@ impl From<IsolateRegistryError> for AnalyticsError {
 
 impl From<oneshot::Canceled> for AnalyticsError {
     fn from(e: Canceled) -> Self {
-        AnalyticsError::AsyncError(e.description().to_string())
+        AnalyticsError::AsyncError(format!("{}", e))
     }
 }
 
 impl From<crossbeam::SendError<AnalyticsEventType>> for AnalyticsError {
     fn from(e: crossbeam::SendError<AnalyticsEventType>) -> Self {
-        AnalyticsError::AsyncError(e.description().to_string())
+        AnalyticsError::AsyncError(format!("{}", e))
     }
 }
 
 impl From<crossbeam::SendError<Vec<String>>> for AnalyticsError {
     fn from(e: crossbeam::SendError<Vec<String>>) -> Self {
-        AnalyticsError::AsyncError(e.description().to_string())
+        AnalyticsError::AsyncError(format!("{}", e))
     }
 }
 
 impl From<crossbeam::SendError<HashMap<String, i32>>> for AnalyticsError {
     fn from(e: crossbeam::SendError<HashMap<String, i32>>) -> Self {
-        AnalyticsError::AsyncError(e.description().to_string())
+        AnalyticsError::AsyncError(format!("{}", e))
     }
 }
 
 impl From<PoisonError<MutexGuard<'_, AnalyticsContext>>> for AnalyticsError {
     fn from(e: PoisonError<MutexGuard<AnalyticsContext>>) -> Self {
-        AnalyticsError::AsyncError(e.description().to_string())
+        AnalyticsError::AsyncError(format!("{}", e))
     }
 }

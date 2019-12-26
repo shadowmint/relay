@@ -166,7 +166,7 @@ fn main() {
 fn trace<T: Debug + Serialize>(context: &str, data: T) {
     let output = match serde_json::to_string(&data) {
         Ok(s) => s,
-        Err(e) => format!("Serialization failed: {}", e.description()),
+        Err(e) => format!("Serialization failed: {}", e),
     };
     println!("\n{}: {:?}\n{}", context, data, output);
 }

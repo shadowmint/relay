@@ -1,0 +1,19 @@
+[package]
+name = "relay-client-sample"
+version = "0.1.0"
+authors = ["Douglas Linder <linderd@iinet.net.au>"]
+edition = "2018"
+
+[[bin]]
+path = "bin/echo-client.rs"
+name = "echo-client"
+
+[[bin]]
+path = "bin/echo-server.rs"
+name = "echo-server"
+
+[dependencies]
+relay-client = { path = ".." }
+tokio = { version = "0.2", features = ["full"] }
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
