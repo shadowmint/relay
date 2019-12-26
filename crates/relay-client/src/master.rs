@@ -23,7 +23,7 @@ impl Master {
             transaction_manager: TransactionManager::new(),
         })
         .await?;
-        println!("Backend send");
+
         backend
             .send(RelayEvent::Master(MasterExternalEvent::InitializeMaster {
                 transaction_id: Uuid::new_v4().to_string(),

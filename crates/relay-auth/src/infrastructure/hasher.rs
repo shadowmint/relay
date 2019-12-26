@@ -11,11 +11,7 @@ impl AuthHasher {
     }
 
     /// Generate a new hash for a request, ignoring the hash field
-    pub fn hash(
-        &self,
-        request: &AuthRequest,
-        secret_store: &dyn AuthSecretProvider,
-    ) -> Result<String, AuthError> {
+    pub fn hash(&self, request: &AuthRequest, secret_store: &dyn AuthSecretProvider) -> Result<String, AuthError> {
         // prep, see auth_events.rs, the format is: expires:key:secret
         let secret = match secret_store.secret_for(&request.key) {
             Some(s) => s,
@@ -33,11 +29,7 @@ impl AuthHasher {
 
     /// Validate the hash on a request.
     /// The result is either Ok(()) or a failure reason.
-    pub fn validate(
-        &self,
-        request: &AuthRequest,
-        secret_store: &dyn AuthSecretProvider,
-    ) -> Result<(), AuthError> {
+    pub fn validate(&self, request: &AuthRequest, secret_store: &dyn AuthSecretProvider) -> Result<(), AuthError> {
         match request.hash.as_ref() {
             Some(s) => {
                 let hash = self.hash(request, secret_store)?;
@@ -75,7 +67,6 @@ mod tests {
 
         let hasher = AuthHasher::new();
         let hash = hasher.hash(&request, &mut secrets).unwrap();
-        println!("Hash: {}", hash);
         assert!(hash.len() > 0);
     }
 

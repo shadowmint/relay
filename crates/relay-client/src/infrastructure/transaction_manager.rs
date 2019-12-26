@@ -2,7 +2,6 @@ use crate::errors::relay_error::RelayError;
 use crate::infrastructure::transaction_manager::transaction_manager_inner::TransactionManagerInner;
 use futures::channel::oneshot;
 use relay_core::model::external_error::ExternalError;
-use std::error::Error;
 use std::sync::mpsc::{channel, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -70,19 +69,20 @@ impl TransactionManager {
     }
 
     pub async fn defer(&self, transaction_id: &str) -> Result<(), RelayError> {
-        match self.inner.lock() {
+        let rx = match self.inner.lock() {
             Ok(mut inner) => {
                 let (sx, rx) = oneshot::channel();
                 inner.save_pending_transaction(transaction_id, sx);
-                match rx.await {
-                    Ok(result) => match result {
-                        Ok(_) => Ok(()),
-                        Err(e) => Err(e),
-                    },
-                    Err(e) => Err(RelayError::SyncError(format!("{}", e))),
-                }
+                rx
             }
-            Err(_e) => Err(RelayError::ArcMutexFailure),
+            Err(_e) => return Err(RelayError::ArcMutexFailure),
+        };
+        match rx.await {
+            Ok(result) => match result {
+                Ok(_) => Ok(()),
+                Err(e) => Err(e),
+            },
+            Err(e) => Err(RelayError::SyncError(format!("{}", e))),
         }
     }
 }

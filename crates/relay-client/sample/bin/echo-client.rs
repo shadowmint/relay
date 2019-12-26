@@ -36,7 +36,6 @@ async fn run() -> Result<(), RelayError> {
     })
     .await?;
 
-    println!("client running...");
     for i in 1..10 {
         let reader = client.channel();
         client

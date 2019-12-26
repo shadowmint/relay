@@ -23,13 +23,10 @@ pub struct MasterTyped<TEvent> {
 impl<TEvent: Send + Serialize + DeserializeOwned + 'static> MasterTyped<TEvent> {
     /// Create a new instance
     pub async fn new(options: MasterOptions) -> Result<MasterTyped<TEvent>, RelayError> {
-        println!("Create master");
         let master = Master::new(options).await?;
-        println!("Create master done");
         let (sx, rx) = crossbeam::unbounded();
         let reader = master.channel().clone();
         MasterTyped::<TEvent>::event_loop(reader, sx);
-        println!("Ok master");
         Ok(MasterTyped { master, input: rx })
     }
 

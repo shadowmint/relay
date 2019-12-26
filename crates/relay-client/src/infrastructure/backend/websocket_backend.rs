@@ -33,13 +33,13 @@ impl WebSocketBackend {
     ) -> Result<Box<dyn ManagedConnectionHandler + Send + 'static>, RelayError> {
         let (resolve, promise) = oneshot::channel();
         let resolve_sharable = Arc::new(Mutex::new(Some(resolve)));
-        println!("Make token");
+
         // Resolve auth token
         let token = WebSocketBackend::get_token(auth)?;
 
         // Spawn the websocket worker function
         let auth_uri = format!("{}/?token={}", remote, token);
-        println!("spawn xxx");
+
         thread::spawn(move || {
             let err_reporter = resolve_sharable.clone();
             match connect(auth_uri, |out| {
@@ -52,18 +52,13 @@ impl WebSocketBackend {
                 };
             }) {
                 Err(_) => {
-                    println!("Connect failed");
                     let failure = Err(RelayError::ConnectionFailed("Unable to connect to remote".to_string()));
                     let _ = WebSocketHandler::resolve(&err_reporter, failure);
                 }
-                Ok(r) => {
-                    println!("Got ok from connect");
-                }
+                Ok(_) => {}
             }
-            println!("Done with spawn");
         });
 
-        println!("Wait for promise");
         // Return a promise for the api
         return match promise.await? {
             Ok(v) => Ok(v),
@@ -148,7 +143,6 @@ impl WebSocketHandler {
         let mut promise_arc = promise.lock()?;
         match promise_arc.take() {
             Some(promise) => {
-                println!("Send err");
                 if promise.send(result).is_err() {
                     return Err(RelayError::SyncError(format!("Failed to dispatch promise result")));
                 }
@@ -163,13 +157,11 @@ impl WebSocketHandler {
 
 impl ws::Handler for WebSocketHandler {
     fn on_open(&mut self, _: ws::Handshake) -> ws::Result<()> {
-        println!("On open");
         self.on_connected();
         Ok(())
     }
 
     fn on_message(&mut self, msg: ws::Message) -> ws::Result<()> {
-        println!("On on_message");
         let event = self.as_event(msg);
         match event {
             Ok(e) => match e.transaction_id() {
@@ -178,7 +170,7 @@ impl ws::Handler for WebSocketHandler {
                     match self.transaction_manager.resolve(&transaction_id, result) {
                         Ok(_) => {}
                         Err(e) => {
-                            println!("Failed to exec relay: {:?}", e);
+                            println!("Failed to resolve transaction: {:?}", e);
                         }
                     }
                 }
@@ -202,13 +194,11 @@ impl ws::Handler for WebSocketHandler {
     }
 
     fn on_error(&mut self, err: ws::Error) {
-        println!("On on_error");
         if !self.connected {
             let failure = Err(RelayError::ConnectionFailed(format!(
                 "Unable to connect to remote: {:?}: {}",
                 err.kind, err.details
             )));
-            println!("??: {}", err);
             let _ = WebSocketHandler::resolve(&self.resolver, failure);
         }
         let _ = self.out.take().unwrap().shutdown();
